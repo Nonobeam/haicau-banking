@@ -1,0 +1,27 @@
+# Environment files in all modules
+**/.env
+**/.env.*
+!**/.env.example
+
+# Memory markdown files (keep README.md)
+**/memory/**/*.md
+!**/memory/**/README.md
+
+# Agent/Spec artifacts in all modules
+**/.claude/
+**/.agent/
+**/openspec/
+**/AGENTS.md
+
+# Ide
+**/.idea
+**/.vscode
+
+# Build file
+**/target/
+
+# Design/dev docs in hcau-central-banking
+hcau-central-banking/LEDGER_DESIGN.md
+hcau-central-banking/DEVELOPMENT_PROBLEMS.md
+LEDGER_DESIGN.md
+DEVELOPMENT_PROBLEMS.md

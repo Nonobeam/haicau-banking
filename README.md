@@ -1,0 +1,69 @@
+# haicau
+
+Multi-module haicau workspace (Spring Boot + Maven).
+
+## Modules
+
+- `hcau-central-banking`
+  Central banking system server.
+- `hcau-banking-reconcile`
+  Reconcile worker/service for central banking.
+- `hcau-banking-common`
+  Shared common module for central banking.
+- `hcau-banking-reconcile-common`
+  Shared reconcile scheduler/library module.
+- `hcau-banking-module-common`
+  Shared module resources/utilities.
+
+## Tech stack
+
+- Java 21
+- Spring Boot 4.0.0
+- Maven
+- PostgreSQL
+- Flyway (migration plugin in server modules)
+
+## Build
+
+From repository root, build/install modules with Maven in dependency order:
+
+```bash
+mvn -f hcau-banking-module-common/pom.xml clean install
+mvn -f hcau-banking-common/pom.xml clean install
+mvn -f hcau-banking-reconcile-common/pom.xml clean install
+mvn -f hcau-central-banking/pom.xml clean install
+mvn -f hcau-banking-reconcile/pom.xml clean install
+```
+
+## Docker Compose
+
+Run from repository root.
+
+### Start infrastructure only
+
+```bash
+docker compose -f docker-compose.infra.yml up -d
+```
+
+### Start apps (with infrastructure)
+
+```bash
+docker compose -f docker-compose.infra.yml -f docker-compose.apps.yml --profile apps up -d
+```
+
+### Stop and remove containers
+
+```bash
+docker compose -f docker-compose.infra.yml -f docker-compose.apps.yml down
+```
+
+### Endpoints
+
+- Kafka UI: http://localhost:8090
+- Central banking: http://localhost:8081
+- Banking reconcile: http://localhost:8082
+
+## Notes
+
+- Environment files are expected per module (`.env`, `.env.example`).
+- Flyway helper command examples are documented inside module READMEs.
