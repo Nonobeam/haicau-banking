@@ -21,7 +21,5 @@
 **/target/
 
 # Design/dev docs in hcau-central-banking
-hcau-central-banking/LEDGER_DESIGN.md
-hcau-central-banking/DEVELOPMENT_PROBLEMS.md
 LEDGER_DESIGN.md
 DEVELOPMENT_PROBLEMS.md
