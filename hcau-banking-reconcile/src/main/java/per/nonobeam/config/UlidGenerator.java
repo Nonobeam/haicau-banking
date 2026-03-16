@@ -10,4 +10,24 @@ public final class UlidGenerator {
     String ulid = UlidCreator.getUlid().toLowerCase();
     return prefix + "_" + ulid;
   }
+
+  public static String generateTransactionId() {
+    return generate("trnx");
+  }
+
+  public static String generateAccountId() {
+    return generate("acct");
+  }
+
+  public static String generateEntryId() {
+    return generate("entr");
+  }
+
+  public static String generateUserId() {
+    return generate("user");
+  }
+
+  public static String generateCorrelationId() {
+    return generate("req");
+  }
 }

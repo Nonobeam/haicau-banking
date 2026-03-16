@@ -8,21 +8,23 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.CreationTimestamp;
 
 @Entity
-@Table(name = "job_config")
+@Table(name = "idempotency_keys")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class JobConfig {
+public class IdempotencyKey {
 
-  @Id private String key;
+  @Id private String idempotencyKey;
 
-  private String value;
+  private Integer responseStatus;
 
-  private String description;
+  private String responseBody;
 
-  @UpdateTimestamp private OffsetDateTime updatedAt;
+  @CreationTimestamp private OffsetDateTime createdAt;
+
+  private OffsetDateTime expiresAt;
 }

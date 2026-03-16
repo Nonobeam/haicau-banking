@@ -11,12 +11,12 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
-@Table(name = "job_config")
+@Table(name = "idempotency_config")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class JobConfig {
+public class IdempotencyConfig {
 
   @Id private String key;
 

@@ -21,3 +21,6 @@ spring:
 
 server:
   port: ${PORT:8080}
+
+stub:
+  enabled: ${STUB_ENABLED:false}

@@ -1,5 +1,7 @@
 package per.nonobeam.config;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,8 +13,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE + 2)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class WebhookIdempotencyFilter extends OncePerRequestFilter {
+
+  private final ObjectMapper objectMapper = new ObjectMapper();
 
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -23,6 +27,30 @@ public class WebhookIdempotencyFilter extends OncePerRequestFilter {
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
-    filterChain.doFilter(request, response);
+    CachedBodyHttpServletRequest wrappedRequest = new CachedBodyHttpServletRequest(request);
+    String body = wrappedRequest.getCachedBodyAsString();
+    String eventId = extractEventId(body);
+
+    if (eventId != null && !eventId.isBlank()) {
+      HttpServletRequest withKey =
+          new HttpServletRequestWrapperWithIdempotencyHeader(wrappedRequest, eventId);
+      filterChain.doFilter(withKey, response);
+      return;
+    }
+
+    filterChain.doFilter(wrappedRequest, response);
+  }
+
+  private String extractEventId(String body) {
+    try {
+      JsonNode root = objectMapper.readTree(body);
+      JsonNode eventId = root.get("eventId");
+      if (eventId != null && !eventId.isNull()) {
+        return eventId.asText();
+      }
+      return null;
+    } catch (Exception ex) {
+      return null;
+    }
   }
 }

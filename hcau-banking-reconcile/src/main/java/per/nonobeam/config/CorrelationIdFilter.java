@@ -24,7 +24,7 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
 
     String correlationId = request.getHeader("X-Correlation-Id");
     if (correlationId == null || correlationId.isBlank()) {
-      correlationId = UlidGenerator.generate("req");
+      correlationId = UlidGenerator.generateCorrelationId();
     }
 
     try {

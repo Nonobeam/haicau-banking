@@ -81,18 +81,20 @@ public class DepositSweepJob extends QuartzJobBean {
         return;
       }
 
-      Account availableAccount =
+      Account accountedAccount =
           accountRepository
               .findAccountByOwnerAndCurrencyAndBucketName(
-                  reservedAccount.getOwner().getId(), reservedAccount.getCurrency(), "AVAILABLE")
+                  reservedAccount.getOwner().getId(),
+                  reservedAccount.getCurrency(),
+                  BucketEnum.ACCOUNTED.name())
               .orElse(null);
 
       if (reservedAccount.getStatus() != AccountStatus.ACTIVE) {
         skipSweep(tx.getId(), "RESERVED account not ACTIVE");
         return;
       }
-      if (availableAccount == null || availableAccount.getStatus() != AccountStatus.ACTIVE) {
-        skipSweep(tx.getId(), "AVAILABLE account not ACTIVE or missing");
+      if (accountedAccount == null || accountedAccount.getStatus() != AccountStatus.ACTIVE) {
+        skipSweep(tx.getId(), "ACCOUNTED account not ACTIVE");
         return;
       }
 
@@ -108,22 +110,24 @@ public class DepositSweepJob extends QuartzJobBean {
               .findByName("INBOUND_SWEEP")
               .orElseThrow(() -> new RuntimeException("Transaction pattern INBOUND_SWEEP missing"));
 
-      String systemUserId = "usr_system";
+      String systemUserId = "user_00000000000000000000000000SYSTEM";
 
       Transaction sweepTx =
           Transaction.builder()
-              .id(UlidGenerator.generate("trnx"))
+              .id(UlidGenerator.generateTransactionId())
+              .idempotencyKey("sweep_" + tx.getId())
               .transactionType(sweepType)
               .status(TransactionStatus.COMPLETED)
               .actorId(systemUserId)
               .causationId(tx.getId())
               .correlationId(tx.getCorrelationId())
+              .sourceService("hcau-banking-reconcile")
               .build();
       depositRepository.save(sweepTx);
 
       LedgerEntry debit =
           LedgerEntry.builder()
-              .id(UlidGenerator.generate("entr"))
+              .id(UlidGenerator.generateEntryId())
               .transaction(sweepTx)
               .account(reservedAccount)
               .amount(amount)
@@ -132,9 +136,9 @@ public class DepositSweepJob extends QuartzJobBean {
 
       LedgerEntry credit =
           LedgerEntry.builder()
-              .id(UlidGenerator.generate("entr"))
+              .id(UlidGenerator.generateEntryId())
               .transaction(sweepTx)
-              .account(availableAccount)
+              .account(accountedAccount)
               .amount(amount)
               .entryType(EntryType.CREDIT)
               .build();
