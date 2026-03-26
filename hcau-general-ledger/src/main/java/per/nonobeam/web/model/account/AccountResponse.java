@@ -8,6 +8,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import per.nonobeam.web.common.account.Account;
 import per.nonobeam.web.common.account.AccountStatus;
+import per.nonobeam.web.common.account.InternalCoa;
+import per.nonobeam.web.common.account.InternalCoaFactory;
 
 @Data
 @Builder
@@ -16,6 +18,7 @@ import per.nonobeam.web.common.account.AccountStatus;
 public class AccountResponse {
   private UUID id;
   private UUID ownerId;
+  private String internalCoa;
   private String domain;
   private String currency;
   private String bucketType;
@@ -23,12 +26,14 @@ public class AccountResponse {
   private OffsetDateTime createdAt;
 
   public static AccountResponse mapToResponse(Account account) {
+    InternalCoa parsed = InternalCoaFactory.parse(account.getInternalCoa());
     return AccountResponse.builder()
         .id(account.getId())
         .ownerId(account.getOwner().getId())
-        .domain(account.getDomain().getName())
-        .currency(account.getCurrency())
-        .bucketType(account.getBucketType().getName())
+        .internalCoa(account.getInternalCoa())
+        .domain(parsed.domainName())
+        .currency(parsed.currency())
+        .bucketType(parsed.bucket().name())
         .status(account.getStatus())
         .createdAt(account.getCreatedAt())
         .build();

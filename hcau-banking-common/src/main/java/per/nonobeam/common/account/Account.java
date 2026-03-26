@@ -32,15 +32,7 @@ public class Account {
   @JoinColumn(name = "owner_id")
   private User owner;
 
-  @ManyToOne
-  @JoinColumn(name = "domain")
-  private DomainType domain;
-
-  private String currency;
-
-  @ManyToOne
-  @JoinColumn(name = "bucket_type")
-  private BucketType bucketType;
+  private String internalCoa;
 
   @CreationTimestamp private OffsetDateTime createdAt;
 

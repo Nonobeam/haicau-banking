@@ -1,2 +1,2 @@
 # Description
-- Reconcile worker for hcau-central-banking
+- Reconcile worker for hcau-general-ledger

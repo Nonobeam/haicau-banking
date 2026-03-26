@@ -1,2 +1,2 @@
 # Description
-- Common module for hcau-central-banking
+- Common module for hcau-general-ledger

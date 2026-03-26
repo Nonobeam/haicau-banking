@@ -4,12 +4,12 @@ Multi-module haicau workspace (Spring Boot + Maven).
 
 ## Modules
 
-- `hcau-central-banking`
-  Central banking system server.
+- `hcau-general-ledger`
+  General ledger system server.
 - `hcau-banking-reconcile`
-  Reconcile worker/service for central banking.
+  Reconcile worker/service for the general ledger.
 - `hcau-banking-common`
-  Shared common module for central banking.
+  Shared common module for the general ledger.
 - `hcau-banking-reconcile-common`
   Shared reconcile scheduler/library module.
 - `hcau-banking-module-common`
@@ -31,7 +31,7 @@ From repository root, build/install modules with Maven in dependency order:
 mvn -f hcau-banking-module-common/pom.xml clean install
 mvn -f hcau-banking-common/pom.xml clean install
 mvn -f hcau-banking-reconcile-common/pom.xml clean install
-mvn -f hcau-central-banking/pom.xml clean install
+mvn -f hcau-general-ledger/pom.xml clean install
 mvn -f hcau-banking-reconcile/pom.xml clean install
 ```
 
@@ -60,7 +60,7 @@ docker compose -f docker-compose.infra.yml -f docker-compose.apps.yml down
 ### Endpoints
 
 - Kafka UI: http://localhost:8090
-- Central banking: http://localhost:8081
+- General ledger: http://localhost:8081
 - Banking reconcile: http://localhost:8082
 
 ## Notes

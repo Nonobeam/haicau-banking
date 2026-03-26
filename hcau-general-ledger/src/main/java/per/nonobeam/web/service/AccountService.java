@@ -13,9 +13,10 @@ import per.nonobeam.exception.ApplicationErrorCode;
 import per.nonobeam.exception.ApplicationException;
 import per.nonobeam.web.common.account.Account;
 import per.nonobeam.web.common.account.AccountStatus;
-import per.nonobeam.web.common.account.BucketType;
-import per.nonobeam.web.common.account.DomainType;
+import per.nonobeam.web.common.account.BucketEnum;
+import per.nonobeam.web.common.account.InternalCoaFactory;
 import per.nonobeam.web.common.account.User;
+import per.nonobeam.web.common.account.DomainType;
 import per.nonobeam.web.model.account.AccountResponse;
 import per.nonobeam.web.model.account.CreateAccountRequest;
 import per.nonobeam.web.repository.AccountRepository;
@@ -43,34 +44,31 @@ public class AccountService {
     }
 
     User owner = commonQueryService.getUser(request.getOwnerId());
-    BucketType bucketAccount = commonQueryService.getBucketType(ACCOUNTED);
-    BucketType bucketReserved = commonQueryService.getBucketType(RESERVED);
-
     String requestedCurrency = request.getCurrency().toUpperCase();
 
     Account mainAccount =
-        createAndSaveAccountIfNotExists(owner, domainType, requestedCurrency, bucketAccount);
-    createAndSaveAccountIfNotExists(owner, domainType, requestedCurrency, bucketReserved);
+        createAndSaveAccountIfNotExists(owner, domainType, requestedCurrency, ACCOUNTED);
+    createAndSaveAccountIfNotExists(owner, domainType, requestedCurrency, RESERVED);
 
     return AccountResponse.mapToResponse(mainAccount);
   }
 
   private Account createAndSaveAccountIfNotExists(
-      User owner, DomainType domain, String currency, BucketType bucketType) {
+      User owner, DomainType domain, String currency, BucketEnum bucket) {
+    String internalCoa =
+        InternalCoaFactory.build(owner.getId(), domain.getName(), currency, bucket);
     return accountRepository
-        .findByOwnerAndDomainAndCurrencyAndBucketType(owner, domain, currency, bucketType)
+        .findByInternalCoa(internalCoa)
         .orElseGet(
             () -> {
               Account newAccount =
                   Account.builder()
                       .owner(owner)
-                      .domain(domain)
-                      .currency(currency)
-                      .bucketType(bucketType)
+                      .internalCoa(internalCoa)
                       .status(AccountStatus.ACTIVE)
                       .build();
               accountRepository.save(newAccount);
-              log.info("Account created for bucket {}", bucketType);
+              log.info("Account created for bucket {}", bucket);
               return newAccount;
             });
   }

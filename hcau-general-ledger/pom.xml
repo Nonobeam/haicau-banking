@@ -9,10 +9,10 @@
     <relativePath/>
   </parent>
   <groupId>per.nonobeam</groupId>
-  <artifactId>hcau-central-banking</artifactId>
+  <artifactId>hcau-general-ledger</artifactId>
   <version>0.0.1-SNAPSHOT</version>
-  <name>hcau-central-banking</name>
-  <description>Central banking system server</description>
+  <name>hcau-general-ledger</name>
+  <description>General ledger system server</description>
   <properties>
     <maven.resources.plugin.version>3.5.0</maven.resources.plugin.version>
     <checkstyle-maven-plugin.version>3.6.0</checkstyle-maven-plugin.version>
@@ -68,6 +68,11 @@
       <artifactId>kafka</artifactId>
       <version>1.19.7</version>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>per.nonobeam</groupId>
+      <artifactId>hcau-banking-common</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
     </dependency>
   </dependencies>
   <dependencyManagement>

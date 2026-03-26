@@ -20,6 +20,7 @@
 # Build file
 **/target/
 
-# Design/dev docs in hcau-central-banking
+# Design/dev docs in hcau-general-ledger
+docs/
 LEDGER_DESIGN.md
 DEVELOPMENT_PROBLEMS.md

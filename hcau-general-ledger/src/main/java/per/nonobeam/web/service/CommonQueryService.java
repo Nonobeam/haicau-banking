@@ -7,8 +7,6 @@ import per.nonobeam.exception.ApplicationErrorCode;
 import per.nonobeam.exception.ApplicationException;
 import per.nonobeam.web.common.account.Account;
 import per.nonobeam.web.common.account.AccountStatus;
-import per.nonobeam.web.common.account.BucketEnum;
-import per.nonobeam.web.common.account.BucketType;
 import per.nonobeam.web.common.account.DomainEnum;
 import per.nonobeam.web.common.account.DomainType;
 import per.nonobeam.web.common.account.User;
@@ -24,7 +22,6 @@ public class CommonQueryService {
   private final UserRepository userRepository;
   private final AccountRepository accountRepository;
   private final DomainTypeRepository domainTypeRepository;
-  private final BucketTypeRepository bucketTypeRepository;
 
   public User getUser(UUID id) {
     return userRepository
@@ -37,13 +34,6 @@ public class CommonQueryService {
     return domainTypeRepository
         .findByName(name)
         .orElseGet(() -> domainTypeRepository.save(DomainType.builder().name(name).build()));
-  }
-
-  public BucketType getBucketType(BucketEnum bucketEnum) {
-    String name = bucketEnum.name();
-    return bucketTypeRepository
-        .findByName(name)
-        .orElseGet(() -> bucketTypeRepository.save(BucketType.builder().name(name).build()));
   }
 
   public Account getAccount(UUID id, AccountStatus status) {
