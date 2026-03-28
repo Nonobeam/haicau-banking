@@ -24,6 +24,8 @@ public class AccountResponse {
   private String bucketType;
   private AccountStatus status;
   private OffsetDateTime createdAt;
+  private String stripeAccountId;
+  private String stripeMetadata;
 
   public static AccountResponse mapToResponse(Account account) {
     InternalCoa parsed = InternalCoaFactory.parse(account.getInternalCoa());
@@ -36,6 +38,8 @@ public class AccountResponse {
         .bucketType(parsed.bucket().name())
         .status(account.getStatus())
         .createdAt(account.getCreatedAt())
+        .stripeAccountId(account.getStripeAccountId())
+        .stripeMetadata(account.getStripeMetadata())
         .build();
   }
 }

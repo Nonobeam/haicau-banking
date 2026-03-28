@@ -86,7 +86,7 @@ public class DepositSweepJob extends QuartzJobBean {
               .findAccountByOwnerAndCurrencyAndBucketName(
                   reservedAccount.getOwner().getId(),
                   reservedAccount.getCurrency(),
-                  BucketEnum.ACCOUNTED.name())
+                  BucketEnum.AVAILABLE.name())
               .orElse(null);
 
       if (reservedAccount.getStatus() != AccountStatus.ACTIVE) {
@@ -94,7 +94,7 @@ public class DepositSweepJob extends QuartzJobBean {
         return;
       }
       if (accountedAccount == null || accountedAccount.getStatus() != AccountStatus.ACTIVE) {
-        skipSweep(tx.getId(), "ACCOUNTED account not ACTIVE");
+        skipSweep(tx.getId(), "AVAILABLE account not ACTIVE");
         return;
       }
 

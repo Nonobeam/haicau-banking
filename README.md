@@ -14,6 +14,10 @@ Multi-module haicau workspace (Spring Boot + Maven).
   Shared reconcile scheduler/library module.
 - `hcau-banking-module-common`
   Shared module resources/utilities.
+- `hcau-platform-common`
+  Shared platform module consumed by platform services.
+- `hcau-platform-service`
+  Platform-facing Spring Boot service.
 
 ## Tech stack
 
@@ -31,8 +35,10 @@ From repository root, build/install modules with Maven in dependency order:
 mvn -f hcau-banking-module-common/pom.xml clean install
 mvn -f hcau-banking-common/pom.xml clean install
 mvn -f hcau-banking-reconcile-common/pom.xml clean install
+mvn -f hcau-platform-common/pom.xml clean install
 mvn -f hcau-general-ledger/pom.xml clean install
 mvn -f hcau-banking-reconcile/pom.xml clean install
+mvn -f hcau-platform-service/pom.xml clean install
 ```
 
 ## Docker Compose

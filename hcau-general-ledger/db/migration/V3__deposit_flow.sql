@@ -102,13 +102,6 @@ CREATE TABLE job_config (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE idempotency_config (
-    key VARCHAR(60) PRIMARY KEY,
-    value VARCHAR(255) NOT NULL,
-    description VARCHAR(255),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
 CREATE TABLE job_tracking (
     job_name VARCHAR(60) NOT NULL,
     transaction_id VARCHAR(40) NOT NULL REFERENCES transactions(id),
@@ -116,12 +109,4 @@ CREATE TABLE job_tracking (
     skipped_reason VARCHAR(255),
     processed_at TIMESTAMPTZ,
     PRIMARY KEY (job_name, transaction_id)
-);
-
-CREATE TABLE idempotency_keys (
-    idempotency_key VARCHAR(255) PRIMARY KEY,
-    response_status INT NOT NULL,
-    response_body TEXT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    expires_at TIMESTAMPTZ NOT NULL
 );

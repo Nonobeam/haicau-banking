@@ -121,7 +121,7 @@ public class DepositService {
                     UUID.fromString("user_00000000000000000000000000SYSTEM"),
                     "FIAT",
                     currency,
-                    BucketEnum.ACCOUNTED))
+                    BucketEnum.AVAILABLE))
             .orElseThrow(
                 () ->
                     new ApplicationException(
