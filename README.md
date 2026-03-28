@@ -2,6 +2,10 @@
 
 Multi-module haicau workspace (Spring Boot + Maven).
 
+## Architecture
+
+![Overall Architecture](overal-architecture.drawio)
+
 ## Modules
 
 - `hcau-central-banking`
