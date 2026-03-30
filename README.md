@@ -6,6 +6,21 @@ Multi-module haicau workspace (Spring Boot + Maven).
 
 ![Overall Architecture](overal-architecture.drawio)
 
+## Ledger design
+
+The platform uses a typed Chart of Accounts (CoA) path format. Every account is identified by a
+colon-delimited path such as `wallet:{customer_id}:{wallet_id}:main` or
+`receivable:counterparty:stripe`.
+
+**Provider trust model:** The platform trusts the payment provider (e.g. Stripe) to settle.
+When a customer initiates a deposit, a receivable claim is recorded immediately against the
+provider — the platform accepts the risk that the provider may fail to confirm. The customer
+wallet follows `reserved → clearing → main` for internal auditability and clean reversal paths,
+independent of the trust decision. The customer's balance is not spendable until the sweep job
+moves funds from `clearing` to `main`.
+
+See [plan-coa-redesign.md](plan-coa-redesign.md) for the full CoA design and deposit flow.
+
 ## Modules
 
 - `hcau-general-ledger`
