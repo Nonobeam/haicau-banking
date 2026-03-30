@@ -60,13 +60,21 @@ external:counterparty:{provider}              -- boundary account at provider ed
 
 ### Ledger distinction
 
-Each account row carries a `ledger` column: `GL` or `SUB`.
+Each account row carries a `ledger` column: `GL` or `SUB`. This is a classification label only — no mirror rows are created.
 
-- `GL` — aggregate control total, platform-wide.
-- `SUB` — per-customer detail. Balances must roll up to GL.
+- `GL` — system-owned control account (bank, receivable, external, offset, revenue). Platform-wide.
+- `SUB` — customer-owned detail account (wallet accounts only).
 
-Customer wallet accounts live primarily in `SUB`. Bank, receivable, offset, revenue, and external
-accounts live primarily in `GL`. GL mirror rows for wallet accounts are created at provisioning time.
+Reconciliation is done by querying across accounts, not by mirroring entries:
+
+```sql
+-- These must always be equal (platform invariant)
+SELECT balance FROM balance_snapshots WHERE account_id = 'acct_...BANK_SHARED_MAIN';
+
+SELECT SUM(bs.balance) FROM balance_snapshots bs
+JOIN accounts a ON bs.account_id = a.id
+WHERE a.coa_path LIKE 'wallet:%:main' AND a.ledger = 'SUB';
+```
 
 ---
 
@@ -74,12 +82,12 @@ accounts live primarily in `GL`. GL mirror rows for wallet accounts are created 
 
 | # | Decision | Resolution |
 |---|---|---|
-| 1 | GL mirror rows for wallet accounts | Create at provisioning time |
+| 1 | GL mirror rows for wallet accounts | Dropped — per-wallet GL mirror rows have no value. `ledger` is a classification label only: `GL` = system-owned control account, `SUB` = customer-owned detail account. |
 | 2 | DEPOSIT_CONFIRMED transaction structure | Two transactions linked by `trace_id` (internal correlation). Each carries a `causation_id` referencing the external event (e.g., Stripe event ID) for reconciliation. |
 | 3 | receivable and external accounts | Seed at startup — new providers require a migration |
 | 4 | wallet_id convention | UUID v7 — independent ID generated at provisioning, not derived from any account row. All IDs will migrate to UUID v7 in a future pass; wallet_id follows the same convention from the start. |
 | 5 | BucketEnum during migration | Kept temporarily as alias, deleted once both services migrated |
-| 6 | external vs receivable in deposit flow | `receivable:counterparty:{provider}` is used at Stage 1 to record the in-flight claim before settlement. `external:counterparty:{provider}` is NOT used in the deposit flow — it belongs to other boundary flows. |
+| 6 | external vs receivable in deposit flow | Both are used in the deposit flow at different stages. `receivable:counterparty:{provider}` is the unconfirmed claim window (Stage 1 → Stage 3). `external:counterparty:{provider}` is the confirmed-but-not-yet-settled window (Stage 3 → Stage N bank settlement). When Stripe COMPLETED fires, receivable is closed and external is opened. When Stripe sweeps funds to the platform's bank, external is closed and `bank:shared:main` is debited. |
 | 7 | wallet:clearing for deposits | Keep — provides rollback safety and auditability between webhook COMPLETED and sweep |
 | 8 | AccountResponse API change | Internal only — breaking change is acceptable, no deprecation strategy needed |
 | 9 | currency column on accounts | Drop from `accounts`. Add to `ledger_entries` (per entry) and change `balance_snapshots` PK to `(account_id, currency)`. |
@@ -108,12 +116,12 @@ progress on their side but nothing has settled yet.
 
 Two transactions linked by `causation_id`. Both posted in response to the COMPLETED webhook.
 
-**Sub-tx 1 — bank side confirmed:**
+**Sub-tx 1 — provider boundary confirmed:**
 
 | Account | Entry | Meaning |
 |---|---|---|
-| `bank:shared:main` | DEBIT | Money confirmed landed |
-| `receivable:counterparty:stripe` | CREDIT | Receivable claim settled |
+| `external:counterparty:stripe` | DEBIT | Money confirmed sitting at Stripe |
+| `receivable:counterparty:stripe` | CREDIT | Unconfirmed claim closed |
 
 **Sub-tx 2 — customer wallet moves forward (`causation_id` → Sub-tx 1):**
 
@@ -121,6 +129,15 @@ Two transactions linked by `causation_id`. Both posted in response to the COMPLE
 |---|---|---|
 | `wallet:{customer_id}:{wallet_id}:reserved` | DEBIT | Release earmark |
 | `wallet:{customer_id}:{wallet_id}:clearing` | CREDIT | Move to in-flight |
+
+### Stage N — Bank settlement (Stripe sweeps to platform bank)
+
+Triggered by Stripe's payout cycle, not by a customer action.
+
+| Account | Entry | Meaning |
+|---|---|---|
+| `bank:shared:main` | DEBIT | Funds arrived in platform's real bank |
+| `external:counterparty:stripe` | CREDIT | Float at Stripe cleared |
 
 ### Stage 4 — Sweep job
 
@@ -200,9 +217,9 @@ ALTER TABLE accounts ADD COLUMN ledger VARCHAR(3) NOT NULL DEFAULT 'SUB'
 -- 2. Rename internal_coa → coa_path
 ALTER TABLE accounts RENAME COLUMN internal_coa TO coa_path;
 
--- 3. Drop old unique constraint, add new composite unique constraint
+-- 3. Drop old unique constraint, add new unique constraint on coa_path alone
 ALTER TABLE accounts DROP CONSTRAINT accounts_internal_coa_key;
-ALTER TABLE accounts ADD CONSTRAINT accounts_coa_path_ledger_key UNIQUE (coa_path, ledger);
+ALTER TABLE accounts ADD CONSTRAINT accounts_coa_path_key UNIQUE (coa_path);
 
 -- 4. Drop FK constraints and columns replaced by coa_path
 ALTER TABLE accounts DROP CONSTRAINT IF EXISTS accounts_domain_fkey;
@@ -261,13 +278,6 @@ BEGIN
             ledger   = 'SUB'
         WHERE id = rec.id;
 
-        -- Insert GL mirror row
-        INSERT INTO accounts (id, owner_id, coa_path, ledger, status, version, created_at)
-        SELECT gen_random_uuid()::VARCHAR, owner_id,
-               'wallet:' || rec.owner_id || ':' || wallet_id || ':main',
-               'GL', status, 0, NOW()
-        FROM accounts WHERE id = rec.id;
-
         -- Persist mapping for pass 2
         INSERT INTO _backfill_wallet_map (owner_id, wallet_id) VALUES (rec.owner_id, wallet_id)
         ON CONFLICT (owner_id) DO NOTHING;
@@ -292,13 +302,6 @@ BEGIN
         SET coa_path = 'wallet:' || rec.owner_id || ':' || wallet_id || ':reserved',
             ledger   = 'SUB'
         WHERE id = rec.id;
-
-        -- Insert GL mirror row
-        INSERT INTO accounts (id, owner_id, coa_path, ledger, status, version, created_at)
-        SELECT gen_random_uuid()::VARCHAR, owner_id,
-               'wallet:' || rec.owner_id || ':' || wallet_id || ':reserved',
-               'GL', status, 0, NOW()
-        FROM accounts WHERE id = rec.id;
     END LOOP;
 
     -- Create clearing rows for each wallet (new state, no existing rows to migrate)
@@ -309,17 +312,10 @@ BEGIN
         WHERE coa_path LIKE 'wallet:%:main'
           AND ledger = 'SUB'
     LOOP
-        -- SUB clearing row
         INSERT INTO accounts (id, owner_id, coa_path, ledger, status, version, created_at)
         VALUES (gen_random_uuid()::VARCHAR, rec.owner_id,
                 'wallet:' || rec.owner_id || ':' || rec.wallet_id_part || ':clearing',
                 'SUB', 'ACTIVE', 0, NOW());
-
-        -- GL mirror clearing row
-        INSERT INTO accounts (id, owner_id, coa_path, ledger, status, version, created_at)
-        VALUES (gen_random_uuid()::VARCHAR, rec.owner_id,
-                'wallet:' || rec.owner_id || ':' || rec.wallet_id_part || ':clearing',
-                'GL', 'ACTIVE', 0, NOW());
     END LOOP;
 
     -- Populate wallets table from backfill map
@@ -365,7 +361,8 @@ INSERT INTO transaction_types (id, name, description) VALUES
 ('ttype_0000000000000DEPOSIT_RECEIVABLE', 'DEPOSIT_RECEIVABLE', 'Stage 1 — records receivable claim and customer reserved entry on deposit initiation'),
 ('ttype_00000000000000DEPOSIT_CONFIRMED', 'DEPOSIT_CONFIRMED',  'Stage 3 — two sub-transactions on webhook COMPLETED, linked by causation_id'),
 ('ttype_000000000000000000DEPOSIT_SWEEP', 'DEPOSIT_SWEEP',      'Stage 4 — sweep job moves wallet:clearing to wallet:main'),
-('ttype_00000000000000000FEE_COLLECTION', 'FEE_COLLECTION',     'Fee collected from customer wallet, offset cleared to revenue');
+('ttype_00000000000000000FEE_COLLECTION', 'FEE_COLLECTION',     'Fee collected from customer wallet, offset cleared to revenue'),
+('ttype_000000000000000BANK_SETTLEMENT',  'BANK_SETTLEMENT',    'Stage N — Stripe payout cycle sweeps confirmed funds from external:stripe to bank:shared:main');
 ```
 
 ---
@@ -380,8 +377,7 @@ provisioning time.
 1. Generate `wallet_id` as UUID v7.
 2. Insert row into `wallets` table (`id = wallet_id`, `customer_id`, `is_primary`, `status = ACTIVE`).
 3. Create three `SUB` account rows: `wallet:{owner}:{wallet_id}:main`, `wallet:{owner}:{wallet_id}:reserved`, `wallet:{owner}:{wallet_id}:clearing`.
-4. Create three `GL` mirror account rows with `ledger = GL` for the same paths.
-5. Stripe metadata stays on the `main` account row via `account_providers` table. No Stripe data in the CoA path.
+4. Stripe metadata stays on the `main` account row via `account_providers` table. No Stripe data in the CoA path.
 
 **Files to change:**
 - `web/common/account/InternalCoa.java` → delete (use `CoaPath` from common)
@@ -423,11 +419,11 @@ Add `AccountRepository.findWalletByOwner(ownerId)` to resolve `wallet_id` before
 
 Two transactions linked by `causation_id`.
 
-**Sub-tx 1 — bank side confirmed:**
+**Sub-tx 1 — provider boundary confirmed:**
 
 | Account | Entry |
 |---|---|
-| `bank:shared:main` | DEBIT |
+| `external:counterparty:stripe` | DEBIT |
 | `receivable:counterparty:stripe` | CREDIT |
 
 **Sub-tx 2 — customer wallet moves forward (`causation_id` → Sub-tx 1):**
@@ -437,14 +433,23 @@ Two transactions linked by `causation_id`.
 | `wallet:{customer_id}:{wallet_id}:reserved` | DEBIT |
 | `wallet:{customer_id}:{wallet_id}:clearing` | CREDIT |
 
-#### 4d. Sweep job — wallet clearing → main (DEPOSIT_SWEEP)
+#### 4d. Bank settlement — Stripe sweeps to platform bank (BANK_SETTLEMENT)
+
+Triggered by Stripe's payout cycle. Not tied to a specific customer deposit.
+
+| Account | Entry |
+|---|---|
+| `bank:shared:main` | DEBIT |
+| `external:counterparty:stripe` | CREDIT |
+
+#### 4e. Sweep job — wallet clearing → main (DEPOSIT_SWEEP)
 
 | Account | Entry |
 |---|---|
 | `wallet:{customer_id}:{wallet_id}:clearing` | DEBIT |
 | `wallet:{customer_id}:{wallet_id}:main` | CREDIT |
 
-#### 4e. Webhook FAILED / VOIDED / EXPIRED entries
+#### 4f. Webhook FAILED / VOIDED / EXPIRED entries
 
 | Account | Entry |
 |---|---|
