@@ -109,15 +109,19 @@ public class DepositService {
 
     Account reserved =
         accountRepository
-            .findAccountByOwnerAndCurrencyAndBucketName(
-                userId, currency, BucketEnum.RESERVED.name())
+            .findByInternalCoa(
+                InternalCoaFactory.build(UUID.fromString(userId), "FIAT", currency, BucketEnum.RESERVED))
             .orElseThrow(
                 () -> new ApplicationException(ApplicationErrorCode.ACCOUNT_NOT_FOUND, userId));
 
     Account buffer =
         accountRepository
-            .findAccountByOwnerAndCurrencyAndBucketName(
-                "user_00000000000000000000000000SYSTEM", currency, BucketEnum.ACCOUNTED.name())
+            .findByInternalCoa(
+                InternalCoaFactory.build(
+                    UUID.fromString("user_00000000000000000000000000SYSTEM"),
+                    "FIAT",
+                    currency,
+                    BucketEnum.AVAILABLE))
             .orElseThrow(
                 () ->
                     new ApplicationException(

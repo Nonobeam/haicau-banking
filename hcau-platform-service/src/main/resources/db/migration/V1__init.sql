@@ -1,0 +1,2 @@
+-- Initial placeholder migration for hcau-platform-service
+-- Add platform-specific schema objects here when defined.

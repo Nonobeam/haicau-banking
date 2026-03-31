@@ -68,7 +68,7 @@ public class DepositWebhookService {
             .findAccountByOwnerAndCurrencyAndBucketName(
                 "user_00000000000000000000000000SYSTEM",
                 reservedAccount.getCurrency(),
-                BucketEnum.ACCOUNTED.name())
+                BucketEnum.AVAILABLE.name())
             .orElse(null);
 
     if (bufferAccount == null) {
