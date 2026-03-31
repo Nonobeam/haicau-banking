@@ -146,6 +146,15 @@ WHERE a.coa_path LIKE 'wallet:%:main' AND a.ledger = 'SUB';
 | 24 | Cross-currency transfers blocked | Same-currency enforced at API validation layer until product decisions are made (rate source, rate commitment, spread model, settlement timing). Cross-currency requires `offset:fx` and `revenue:fx_spread` CoA paths. Blocked on product input. |
 | 25 | Late withdrawal reversal variants | Two variants based on whether Stage 4 (bank settlement) has occurred. Variant A: payable still open — single transaction closes payable, re-credits wallet. Variant B: payable already settled — Phase 1 re-credits wallet and opens receivable (platform absorbs float); Phase 2 settles receivable when bank return arrives. Variant selected by querying payable balance under the original trace_id. |
 | 26 | Partial return handling | If provider returns less than full withdrawal amount, the difference is posted to `expense:counterparty:{provider}:return_fee`. Deferred — assume full returns until needed. |
+| 27 | ledger_entries type and amount columns | Retain explicit `type VARCHAR(6) CHECK (type IN ('DEBIT', 'CREDIT'))` and `amount DECIMAL(38, 8) CHECK (amount > 0)` columns in `ledger_entries`. Signed amounts are not used because DEBIT/CREDIT direction is not equivalent to +/-: the balance effect depends on account type (asset vs liability vs revenue). Explicit type + absolute amount avoids ambiguity across mixed account types. V8 migration drops the current `credit`/`debit` two-column model and replaces it with this single `amount` + `type` model. |
+| 28 | Webhook idempotency constraint | Add `UNIQUE (causation_id, transaction_type)` to the `transactions` table. Provider webhooks (e.g. Stripe `event_id`) are mapped to `causation_id`. This DB-level constraint prevents double-crediting from duplicate webhook deliveries — the second insert fails with a unique violation, which the webhook handler must catch and treat as a no-op (already processed). |
+| 29 | Sweep job batch size | `DepositSweepJob` must process eligible clearing entries in batches of at most 500 rows per DB transaction. Sweeping all eligible rows in a single transaction risks lock escalation, memory exhaustion, and long-running transaction timeouts. Each batch commits independently. Job is idempotent — re-running after a partial failure re-queries eligible rows and picks up where it left off. |
+| 30 | Wallet status enforcement | `LedgerEntryWriter` must validate that every SUB wallet account (`wallet:{customer_id}:{wallet_id}:*`) referenced in the entry payload has `wallets.status = ACTIVE` before acquiring locks. Entries targeting a `FROZEN` or `CLOSED` wallet are rejected with a domain error. GL-only transactions (no SUB wallet accounts) are not subject to this check. |
+| 31 | GL control account balance_snapshots async | `LedgerEntryWriter` skips `balance_snapshots` updates for `wallet:control:*` accounts during the synchronous write path. A scheduled cronjob recomputes GL control balances from `ledger_entries` and writes them to `balance_snapshots`. Reconciliation jobs that check `wallet:control = SUM(SUB)` must either query `ledger_entries` directly (real-time) or account for a propagation delay when comparing against `balance_snapshots` (eventual). |
+| 32 | LedgerEntryWriter transaction propagation | `LedgerEntryWriter` uses `Propagation.REQUIRED` (joins caller's transaction) not `REQUIRES_NEW`. With `REQUIRES_NEW` the ledger write commits before the caller completes — a subsequent caller failure would leave ledger entries written against rolled-back business state. The caller owns the transaction boundary. |
+| 33 | transaction_types schema — gl_required, sub_required | Add `gl_required BOOLEAN NOT NULL` and `sub_required VARCHAR(10)` columns to `transaction_types`. Values mirror the Transaction Type Classification table. Reconciliation Check 2 reads these columns directly from the DB — they are not hardcoded in application logic. V8 migration adds the columns and populates them for all seeded types. |
+| 34 | Sweep job query — drive from balance_snapshots | `DepositSweepJob` eligibility query drives from `balance_snapshots WHERE coa_path LIKE 'wallet:%:clearing' AND balance > 0`, not from `ledger_entries`. Scanning `ledger_entries` with `NOT EXISTS` is O(n) on an ever-growing immutable table. `balance_snapshots` lookup is O(indexed). Settlement gate (BANK_SETTLEMENT existence) is still verified via `causation_id` chain for each candidate before sweeping. |
+| 35 | Webhook state machine sequencing | `UNIQUE(causation_id, transaction_type)` prevents duplicate events but not out-of-order deliveries (e.g. Stripe sending `payment_intent.succeeded` before `payment_intent.processing`). The webhook handler must validate the current transaction status before executing ledger logic. Only valid transitions are accepted; invalid transitions return HTTP 200 with no-op body to prevent Stripe retries. |
 | 11 | Provider trust model | Platform trusts the provider to settle. `receivable:counterparty:{provider}` is recorded at Stage 1 as a committed claim — not provisional. The platform accepts the risk that the provider may fail to confirm. Customer wallet still follows `reserved → clearing → main` for internal auditability and rollback safety, independent of the trust decision. |
 
 ---
@@ -179,6 +188,25 @@ it will be honoured) and earmarks the customer balance.
 
 No ledger entries. Transaction status updated only. Stripe has acknowledged the payment is in
 progress on their side but nothing has settled yet.
+
+### Webhook State Machine
+
+The webhook handler must validate the current transaction status before executing any ledger logic. The `UNIQUE(causation_id, transaction_type)` constraint prevents duplicate events but not out-of-order deliveries.
+
+**Valid transitions:**
+
+| Current status | Event | Action |
+|---|---|---|
+| (none) | `payment_intent.created` | Create transaction, status → `PENDING` |
+| `PENDING` | `payment_intent.processing` | Status → `PROCESSING`, no ledger entries (Stage 2) |
+| `PROCESSING` | `payment_intent.succeeded` | Execute Stage 3 ledger entries, status → `COMPLETED` |
+| `PENDING` or `PROCESSING` | `payment_intent.payment_failed` | Execute reversal entries, status → `FAILED` |
+| `COMPLETED` | any | No-op — already terminal |
+| `FAILED` | any | No-op — already terminal |
+
+**Invalid / out-of-order transitions** (e.g. `payment_intent.succeeded` arriving before `payment_intent.processing`): reject with **HTTP 200 no-op** response. Do not return 4xx — that would trigger Stripe retries. Log the event for manual investigation.
+
+The webhook handler resolves the transaction by `causation_id` (Stripe `event.id` mapped to `payment_intent_id`) before dispatching. If no transaction exists for the event's `payment_intent_id`, treat as unknown and return HTTP 200 with no-op.
 
 ### Stage 3 — Stripe webhook COMPLETED
 
@@ -218,6 +246,46 @@ Triggered by Stripe's payout cycle, not by a customer action.
 
 ### Stage 4 — Sweep job
 
+**Settlement gate — must pass before sweep executes:**
+
+The sweep job drives from `balance_snapshots` (O(indexed)) — not from `ledger_entries` (O(n) table scan). An account with `balance > 0` on a `wallet:%:clearing` path is a sweep candidate. The `causation_id` chain is then used to verify the `BANK_SETTLEMENT` gate for each candidate.
+
+```sql
+-- Step 1: find clearing accounts with outstanding balance (O(indexed) — drives from balance_snapshots)
+SELECT bs.account_id, bs.currency, bs.balance, a.coa_path
+FROM balance_snapshots bs
+JOIN accounts a ON bs.account_id = a.id
+WHERE a.coa_path LIKE 'wallet:%:clearing'
+  AND bs.balance > 0
+LIMIT :batchSize;
+
+-- Step 2: for each candidate account_id, verify BANK_SETTLEMENT gate via causation_id chain
+-- Retrieve the most recent DEPOSIT_CONFIRMED sub-tx 2 for this account (the one that moved it to clearing)
+SELECT t.id, t.trace_id, t.causation_id
+FROM transactions t
+JOIN transaction_types tt ON t.transaction_type = tt.id
+JOIN ledger_entries le ON le.transaction_id = t.id
+WHERE tt.name = 'DEPOSIT_CONFIRMED'
+  AND le.account_id = :clearingAccountId
+  AND le.type = 'CREDIT'
+  AND t.status = 'COMPLETED'
+ORDER BY t.created_at DESC
+LIMIT 1;
+
+-- Step 3: verify a BANK_SETTLEMENT exists on the same trace_id as sub-tx 1 (the causation of sub-tx 2)
+SELECT 1
+FROM transactions t_settle
+JOIN transaction_types tt_settle ON t_settle.transaction_type = tt_settle.id
+WHERE tt_settle.name = 'BANK_SETTLEMENT'
+  AND t_settle.trace_id = (
+      SELECT t_cause.trace_id FROM transactions t_cause WHERE t_cause.id = :causationId
+  )
+  AND t_settle.status = 'COMPLETED';
+-- If this returns no row → skip this account, try again next cycle
+```
+
+Any candidate without a confirmed `BANK_SETTLEMENT` is skipped until the next sweep cycle.
+
 GL entries (self-balancing):
 
 | Account | Ledger | Entry | Meaning |
@@ -233,6 +301,11 @@ SUB entries (customer detail):
 | `wallet:{customer_id}:{wallet_id}:main` | SUB | CREDIT | Customer balance spendable |
 
 ### Failure / Reversal (any stage before COMPLETED)
+
+**Transaction payload requirements for reconciliation:**
+
+- `trace_id`: must be the **exact same** `trace_id` as the original `DEPOSIT_RECEIVABLE` transaction. This allows the reconciliation zero-sum check to find and net both entries under the same trace.
+- `causation_id`: must reference the original `DEPOSIT_RECEIVABLE` transaction ID (e.g. `txn_001`). This preserves the causal chain for audit.
 
 GL entries (self-balancing):
 
@@ -458,12 +531,13 @@ Every database transaction touching more than one account row must acquire row-l
 
 **Implementation steps (enforced by `LedgerEntryWriter`):**
 1. Receive list of `(account_id, type, amount, currency)` tuples.
-2. Sort by `account_id` ascending (lexicographic, case-sensitive).
-3. `SELECT ... FOR UPDATE NOWAIT` (or with explicit timeout, e.g. `SET lock_timeout = '5s'`) each account row in sorted order. If any lock acquisition times out, the entire transaction rolls back immediately. No partial lock states are allowed to leak.
-4. Validate balances (sufficient funds for debits).
-5. Write `ledger_entries` rows.
-6. Update `balance_snapshots`.
-7. Commit. On any failure → full rollback.
+2. For every SUB wallet account in the payload (`wallet:{customer_id}:{wallet_id}:*`): resolve the parent `wallets` row and assert `wallets.status = ACTIVE`. Reject with domain error if `FROZEN` or `CLOSED`. GL-only payloads skip this check.
+3. Sort by `account_id` ascending (lexicographic, case-sensitive).
+4. `SELECT ... FOR UPDATE NOWAIT` (or with explicit timeout, e.g. `SET lock_timeout = '5s'`) each account row in sorted order. If any lock acquisition times out, the entire transaction rolls back immediately. No partial lock states are allowed to leak.
+5. Validate balances (sufficient funds for debits).
+6. Write `ledger_entries` rows.
+7. Update `balance_snapshots` for SUB accounts and non-control GL accounts only. Skip `wallet:control:*` accounts — their snapshots are maintained by the GL snapshot cronjob (see below).
+8. Commit. On any failure → full rollback.
 
 **Why this prevents deadlock:**
 
@@ -478,8 +552,52 @@ Lock acquisition order is identical regardless of which direction the transfer r
 **Note on UUIDv7 account IDs:** If `account_id` uses UUIDv7 (e.g. `acct_01H...`), lexicographic order follows chronological creation order due to the timestamp prefix. This is acceptable — the requirement is determinism, not any specific ordering. Accounts created within the same millisecond batch may have unpredictable relative order. If this causes issues in practice, add a secondary sort key (e.g. `coa_path`).
 
 **Constraints:**
-- `LedgerEntryWriter` must execute within its own transaction boundary (`REQUIRES_NEW` propagation). This prevents a lock timeout in the ledger write from corrupting an outer transaction.
+- `LedgerEntryWriter` must use `Propagation.REQUIRED` (or `MANDATORY`) — it must participate in the caller's existing transaction, not open a new one. `REQUIRES_NEW` would commit the ledger write independently: if the calling business service subsequently fails (e.g. constraint violation on a business entity update), ledger entries would be permanently written while business state rolls back, causing corruption. The caller owns the transaction boundary; `LedgerEntryWriter` is a participant.
 - This utility is the only permitted path for writing ledger entries. No service or flow bypasses it. Enforced at code review.
+
+---
+
+### GL Control Snapshot Cronjob
+
+`wallet:control:*` balances in `balance_snapshots` are not updated synchronously by `LedgerEntryWriter`. A scheduled cronjob recomputes them from `ledger_entries`:
+
+```sql
+-- Recompute wallet:control:main snapshot
+INSERT INTO balance_snapshots (account_id, currency, balance, updated_at)
+SELECT
+    a.id AS account_id,
+    le.currency,
+    SUM(CASE WHEN le.type = 'DEBIT' THEN le.amount ELSE -le.amount END) AS balance,
+    NOW()
+FROM ledger_entries le
+JOIN accounts a ON le.account_id = a.id
+WHERE a.coa_path IN ('wallet:control:main', 'wallet:control:reserved', 'wallet:control:clearing')
+GROUP BY a.id, le.currency
+ON CONFLICT (account_id, currency)
+DO UPDATE SET balance = EXCLUDED.balance, updated_at = EXCLUDED.updated_at;
+```
+
+Run frequency: configurable, default every 60 seconds. Reconciliation jobs that compare `wallet:control = SUM(SUB)` must use `ledger_entries` directly (real-time) or tolerate up to one cronjob interval of lag when reading from `balance_snapshots`.
+
+---
+
+### Sweep Job Batching
+
+`DepositSweepJob` must process eligible clearing entries in batches. Each batch is a separate DB transaction. The job is idempotent — a re-run after partial failure re-queries eligible rows.
+
+```
+BATCH_SIZE = 500
+
+loop:
+    rows = query eligible clearing entries (settlement-gated, not yet swept) LIMIT BATCH_SIZE
+    if rows is empty → exit
+    for each row in rows:
+        call LedgerEntryWriter with DEPOSIT_SWEEP entries
+    commit batch
+    if rows.size < BATCH_SIZE → exit  (last page)
+```
+
+Choosing `BATCH_SIZE = 500` as default. Tune based on observed lock contention and transaction duration in production. Each batch must complete within the configured `lock_timeout`.
 
 ---
 
@@ -512,6 +630,7 @@ This table is the single source of truth. New transaction types must be classifi
 **Check 1 — GL Zero-Sum**
 
 If the trace_id has any GL entries: `SUM(debits) - SUM(credits) = 0`.
+This check queries `ledger_entries` directly — not `balance_snapshots` — because `wallet:control:*` snapshots are async and may lag.
 Fail → alert: GL imbalance.
 
 **Check 2 — GL-Exempt Validation**
@@ -636,7 +755,22 @@ ALTER TABLE accounts DROP COLUMN IF EXISTS currency;
 DROP TABLE IF EXISTS domain_types;
 DROP TABLE IF EXISTS bucket_types;
 
--- 6. Add currency to ledger_entries
+-- 6. Migrate ledger_entries: replace credit/debit two-column model with type + amount
+--    Backfill from existing credit/debit columns before dropping them.
+ALTER TABLE ledger_entries ADD COLUMN type   VARCHAR(6)    CHECK (type IN ('DEBIT', 'CREDIT'));
+ALTER TABLE ledger_entries ADD COLUMN amount DECIMAL(38, 8) CHECK (amount > 0);
+
+UPDATE ledger_entries SET type = 'DEBIT',  amount = debit  WHERE debit  IS NOT NULL;
+UPDATE ledger_entries SET type = 'CREDIT', amount = credit WHERE credit IS NOT NULL;
+
+ALTER TABLE ledger_entries ALTER COLUMN type   SET NOT NULL;
+ALTER TABLE ledger_entries ALTER COLUMN amount SET NOT NULL;
+
+ALTER TABLE ledger_entries DROP CONSTRAINT IF EXISTS one_side_only;
+ALTER TABLE ledger_entries DROP COLUMN credit;
+ALTER TABLE ledger_entries DROP COLUMN debit;
+
+-- 6b. Add currency to ledger_entries
 ALTER TABLE ledger_entries ADD COLUMN currency VARCHAR(10) NOT NULL DEFAULT 'USD';
 
 -- 7. Update balance_snapshots — drop old PK, add currency, new composite PK
@@ -764,23 +898,36 @@ INSERT INTO accounts (id, owner_id, coa_path, ledger, status, version) VALUES
 ('acct_0000000000WALLET_CONTROL_RESERVED',       'user_00000000000000000000000000SYSTEM', 'wallet:control:reserved',        'GL', 'ACTIVE', 0),
 ('acct_0000000000WALLET_CONTROL_CLEARING',       'user_00000000000000000000000000SYSTEM', 'wallet:control:clearing',        'GL', 'ACTIVE', 0);
 
--- 13. Add new transaction types
-INSERT INTO transaction_types (id, name, description) VALUES
-('ttype_0000000000000DEPOSIT_RECEIVABLE', 'DEPOSIT_RECEIVABLE', 'Stage 1 — records receivable claim and customer reserved entry on deposit initiation'),
-('ttype_00000000000000DEPOSIT_CONFIRMED', 'DEPOSIT_CONFIRMED',  'Stage 3 — two sub-transactions on webhook COMPLETED, linked by causation_id'),
-('ttype_000000000000000000DEPOSIT_SWEEP', 'DEPOSIT_SWEEP',      'Stage 4 — sweep job moves wallet:clearing to wallet:main'),
-('ttype_00000000000000000FEE_COLLECTION', 'FEE_COLLECTION',     'Fee collected from customer wallet, offset cleared to revenue'),
-('ttype_000000000000000BANK_SETTLEMENT',    'BANK_SETTLEMENT',              'Stage N — provider payout cycle sweeps confirmed funds from external to bank:shared:main'),
-('ttype_00000000000WITHDRAWAL_INITIATE',    'WITHDRAWAL_INITIATE',          'W-Stage 1 — customer initiates withdrawal, wallet:main locked to wallet:reserved'),
-('ttype_000000WITHDRAWAL_PROVIDER_SENT',    'WITHDRAWAL_PROVIDER_SENT',     'W-Stage 2 — provider API called, wallet:reserved moves to wallet:clearing'),
-('ttype_0000000000WITHDRAWAL_CONFIRMED',    'WITHDRAWAL_CONFIRMED',         'W-Stage 3 — provider confirms execution, wallet:clearing exits SUB, payable opened'),
-('ttype_0000000000WITHDRAWAL_SETTLED',      'WITHDRAWAL_SETTLED',           'W-Stage 4 — bank settlement, payable closed, bank:shared:main decreases'),
-('ttype_000WITHDRAWAL_LATE_REVERSAL',       'WITHDRAWAL_LATE_REVERSAL',     'Late reversal — funds re-enter SUB world after terminal state (Variant A or B Phase 1)'),
-('ttype_0000WITHDRAWAL_RETURN_SETTLED',     'WITHDRAWAL_RETURN_SETTLED',    'Variant B Phase 2 — bank return arrives, receivable settled, bank:main restored'),
-('ttype_00000INTERNAL_TRANSFER_INSTANT',    'INTERNAL_TRANSFER_INSTANT',    'Instant same-vault transfer, SUB only, no GL entries'),
-('ttype_000000INTERNAL_TRANSFER_GATED',     'INTERNAL_TRANSFER_GATED',      'Staged transfer through reserved/clearing, GL+SUB entries required'),
-('ttype_0000000000DEPOSIT_REVERSAL',        'DEPOSIT_REVERSAL',             'Deposit failure/reversal before COMPLETED — reverses Stage 1 entries'),
-('ttype_000000GATED_TRANSFER_REVERSAL',     'GATED_TRANSFER_REVERSAL',      'Reversal of staged internal transfer from reserved or clearing back to main');
+-- 15. Add idempotency constraint — prevents double-crediting from duplicate webhook deliveries
+--     causation_id maps to the provider event_id (e.g. Stripe evt_xxx).
+--     Second insert with same (causation_id, transaction_type) fails with unique violation → treat as no-op.
+ALTER TABLE transactions ADD COLUMN causation_id VARCHAR(255);
+ALTER TABLE transactions ADD CONSTRAINT transactions_causation_type_key
+    UNIQUE (causation_id, transaction_type);
+
+-- 13. Add gl_required and sub_required columns to transaction_types
+ALTER TABLE transaction_types ADD COLUMN gl_required  BOOLEAN     NOT NULL DEFAULT FALSE;
+ALTER TABLE transaction_types ADD COLUMN sub_required VARCHAR(10) CHECK (sub_required IN ('(a)', '(b)', 'yes', 'no'));
+
+-- 13b. Insert new transaction types with gl_required and sub_required populated
+-- sub_required values: '(a)' = cross-ledger single-sided, '(b)' = intra-wallet self-balancing,
+--                      'yes' = required (both sides), 'no' = GL-only (no SUB)
+INSERT INTO transaction_types (id, name, description, gl_required, sub_required) VALUES
+('ttype_0000000000000DEPOSIT_RECEIVABLE', 'DEPOSIT_RECEIVABLE', 'Stage 1 — records receivable claim and customer reserved entry on deposit initiation',        TRUE,  '(a)'),
+('ttype_00000000000000DEPOSIT_CONFIRMED', 'DEPOSIT_CONFIRMED',  'Stage 3 — two sub-transactions on webhook COMPLETED, linked by causation_id',                 TRUE,  '(b)'),
+('ttype_000000000000000000DEPOSIT_SWEEP', 'DEPOSIT_SWEEP',      'Stage 4 — sweep job moves wallet:clearing to wallet:main',                                    TRUE,  '(b)'),
+('ttype_00000000000000000FEE_COLLECTION', 'FEE_COLLECTION',     'Fee collected from customer wallet, offset cleared to revenue',                               TRUE,  'yes'),
+('ttype_000000000000000BANK_SETTLEMENT',  'BANK_SETTLEMENT',    'Stage N — provider payout cycle sweeps confirmed funds from external to bank:shared:main',    TRUE,  'no'),
+('ttype_00000000000WITHDRAWAL_INITIATE',  'WITHDRAWAL_INITIATE',         'W-Stage 1 — customer initiates withdrawal, wallet:main locked to wallet:reserved',   TRUE,  '(b)'),
+('ttype_000000WITHDRAWAL_PROVIDER_SENT',  'WITHDRAWAL_PROVIDER_SENT',    'W-Stage 2 — provider API called, wallet:reserved moves to wallet:clearing',          TRUE,  '(b)'),
+('ttype_0000000000WITHDRAWAL_CONFIRMED',  'WITHDRAWAL_CONFIRMED',        'W-Stage 3 — provider confirms execution, wallet:clearing exits SUB, payable opened', TRUE,  '(a)'),
+('ttype_0000000000WITHDRAWAL_SETTLED',    'WITHDRAWAL_SETTLED',          'W-Stage 4 — bank settlement, payable closed, bank:shared:main decreases',            TRUE,  'no'),
+('ttype_000WITHDRAWAL_LATE_REVERSAL',     'WITHDRAWAL_LATE_REVERSAL',    'Late reversal — funds re-enter SUB world after terminal state (Variant A or B Ph1)', TRUE,  '(a)'),
+('ttype_0000WITHDRAWAL_RETURN_SETTLED',   'WITHDRAWAL_RETURN_SETTLED',   'Variant B Phase 2 — bank return arrives, receivable settled, bank:main restored',    TRUE,  'no'),
+('ttype_00000INTERNAL_TRANSFER_INSTANT',  'INTERNAL_TRANSFER_INSTANT',   'Instant same-vault transfer, SUB only, no GL entries',                               FALSE, '(b)'),
+('ttype_000000INTERNAL_TRANSFER_GATED',   'INTERNAL_TRANSFER_GATED',     'Staged transfer through reserved/clearing, GL+SUB entries required',                 TRUE,  '(b)'),
+('ttype_0000000000DEPOSIT_REVERSAL',      'DEPOSIT_REVERSAL',            'Deposit failure/reversal before COMPLETED — reverses Stage 1 entries',               TRUE,  '(a)'),
+('ttype_000000GATED_TRANSFER_REVERSAL',   'GATED_TRANSFER_REVERSAL',     'Reversal of staged internal transfer from reserved or clearing back to main',         TRUE,  '(b)');
 ```
 
 ---
@@ -911,7 +1058,7 @@ SUB:
 **Files to change in `hcau-banking-reconcile`:**
 - `service/DepositService.java` — update initiation entries to new paths
 - `service/DepositWebhookService.java` — update COMPLETED (two sub-tx with causation_id) and reversal entries
-- `job/DepositSweepJob.java` — sweep from `wallet:clearing` → `wallet:main` (not `reserved` → `available`)
+- `job/DepositSweepJob.java` — sweep from `wallet:clearing` → `wallet:main` (not `reserved` → `available`); gate on `BANK_SETTLEMENT` existence via `causation_id` chain before sweeping each clearing entry
 - `repository/AccountRepository.java` — add `findWalletByOwner`, `findByCoaPath`
 
 ---
@@ -943,7 +1090,7 @@ Review:
 | `hcau-banking-common` | `common/ledger/LedgerEntryWriter.java` | Create — shared locking utility, only permitted path for writing ledger entries |
 | `hcau-banking-common` | `common/account/Account.java` | Edit — add `ledger`, rename `internalCoa` → `coaPath`, remove `currency` |
 | `hcau-banking-common` | `repository/AccountRepository.java` | Edit — update queries |
-| `hcau-banking-common` | `common/ledger/LedgerEntry.java` | Edit — add `currency` field |
+| `hcau-banking-common` | `common/ledger/LedgerEntry.java` | Edit — replace `credit`/`debit` fields with `type` (enum DEBIT/CREDIT) and `amount` (positive); add `currency` field |
 | `hcau-banking-common` | `common/ledger/BalanceSnapshot.java` | Edit — update PK to `(account_id, currency)` |
 | `hcau-banking-common` | `common/account/BucketEnum.java` | Delete after migration |
 | `hcau-general-ledger` | `db/migration/V8__coa_redesign.sql` | Create |
@@ -954,7 +1101,8 @@ Review:
 | `hcau-general-ledger` | `web/model/account/AccountResponse.java` | Edit |
 | `hcau-banking-reconcile` | `service/DepositService.java` | Edit |
 | `hcau-banking-reconcile` | `service/DepositWebhookService.java` | Edit |
-| `hcau-banking-reconcile` | `job/DepositSweepJob.java` | Edit |
+| `hcau-banking-reconcile` | `job/DepositSweepJob.java` | Edit — batch 500/tx, settlement gate via causation_id chain |
+| `hcau-banking-reconcile` | `job/GlSnapshotJob.java` | Create — recomputes wallet:control:* snapshots from ledger_entries |
 | `hcau-banking-reconcile` | `repository/AccountRepository.java` | Edit |
 
 ---
