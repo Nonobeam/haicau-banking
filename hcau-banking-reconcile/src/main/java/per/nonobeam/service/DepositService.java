@@ -110,7 +110,8 @@ public class DepositService {
     Account reserved =
         accountRepository
             .findByInternalCoa(
-                InternalCoaFactory.build(UUID.fromString(userId), "FIAT", currency, BucketEnum.RESERVED))
+                InternalCoaFactory.build(
+                    UUID.fromString(userId), "FIAT", currency, BucketEnum.RESERVED))
             .orElseThrow(
                 () -> new ApplicationException(ApplicationErrorCode.ACCOUNT_NOT_FOUND, userId));
 

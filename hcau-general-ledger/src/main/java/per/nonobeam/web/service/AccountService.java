@@ -75,9 +75,11 @@ public class AccountService {
       User owner, DomainType domainType, String currency) {
     Map<BucketEnum, String> coaMap = new EnumMap<>(BucketEnum.class);
     coaMap.put(
-        AVAILABLE, InternalCoaFactory.build(owner.getId(), domainType.getName(), currency, AVAILABLE));
+        AVAILABLE,
+        InternalCoaFactory.build(owner.getId(), domainType.getName(), currency, AVAILABLE));
     coaMap.put(
-        RESERVED, InternalCoaFactory.build(owner.getId(), domainType.getName(), currency, RESERVED));
+        RESERVED,
+        InternalCoaFactory.build(owner.getId(), domainType.getName(), currency, RESERVED));
     return coaMap;
   }
 
@@ -96,9 +98,7 @@ public class AccountService {
             .build();
     Account savedAccount = accountRepository.save(newAccount);
     log.info(
-        "Account created for bucket {} with Stripe account {}",
-        AVAILABLE,
-        stripeAccount.getId());
+        "Account created for bucket {} with Stripe account {}", AVAILABLE, stripeAccount.getId());
     return savedAccount;
   }
 
@@ -106,8 +106,7 @@ public class AccountService {
     createAccountIfNotExists(owner, RESERVED, reservedInternalCoa);
   }
 
-  private Account createAccountIfNotExists(
-      User owner, BucketEnum bucket, String internalCoa) {
+  private Account createAccountIfNotExists(User owner, BucketEnum bucket, String internalCoa) {
     return accountRepository
         .findByInternalCoa(internalCoa)
         .orElseGet(

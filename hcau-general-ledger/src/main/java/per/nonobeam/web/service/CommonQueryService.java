@@ -11,7 +11,6 @@ import per.nonobeam.web.common.account.DomainEnum;
 import per.nonobeam.web.common.account.DomainType;
 import per.nonobeam.web.common.account.User;
 import per.nonobeam.web.repository.AccountRepository;
-import per.nonobeam.web.repository.BucketTypeRepository;
 import per.nonobeam.web.repository.DomainTypeRepository;
 import per.nonobeam.web.repository.UserRepository;
 

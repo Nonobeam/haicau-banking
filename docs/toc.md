@@ -4,8 +4,7 @@
 
 External provider integration docs. Use when working with Stripe APIs, webhooks, or account provisioning.
 
-- [Account](stripe/account.md) — Stripe account setup and metadata
-- [Product](stripe/product.md) — Stripe product configuration
+- [Stripe Table of Contents](stripe/toc.md) — Full index of Stripe integration docs
 
 ## Internal System (HCAU) — `docs/hcau/`
 
