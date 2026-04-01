@@ -22,6 +22,7 @@
 
 # Design/dev docs in hcau-general-ledger
 docs/
+plans/
 LEDGER_DESIGN.md
 DEVELOPMENT_PROBLEMS.md
 plan-*.md
