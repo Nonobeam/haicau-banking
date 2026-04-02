@@ -1,10 +1,10 @@
 # haicau
 
 Multi-module haicau workspace (Spring Boot + Maven).
-
+.png
 ## Architecture
 
-![Overall Architecture](overal-architecture.drawio)
+![Overall Architecture](overal-architecture.drawio.png)
 
 ## Ledger design
 
