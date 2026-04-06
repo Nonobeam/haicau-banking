@@ -5,6 +5,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
+import per.nonobeam.config.SystemProperties;
 import org.springframework.transaction.annotation.Transactional;
 import per.nonobeam.common.account.Account;
 import per.nonobeam.common.account.AccountStatus;
@@ -44,6 +45,7 @@ public class DepositService {
   private final ExternalProviderRepository externalProviderRepository;
   private final DepositProvider depositProvider;
   private final ObjectMapper objectMapper;
+  private final SystemProperties systemProperties;
 
   public DepositResponse initiate(DepositRequest request) {
     validateRequest(request);
@@ -109,19 +111,15 @@ public class DepositService {
 
     Account reserved =
         accountRepository
-            .findByInternalCoa(
-                InternalCoaFactory.build(UUID.fromString(userId), "FIAT", currency, BucketEnum.RESERVED))
+            .findAccountByOwnerAndCurrencyAndBucketName(
+                userId, currency, BucketEnum.RESERVED.name())
             .orElseThrow(
                 () -> new ApplicationException(ApplicationErrorCode.ACCOUNT_NOT_FOUND, userId));
 
     Account buffer =
         accountRepository
-            .findByInternalCoa(
-                InternalCoaFactory.build(
-                    UUID.fromString("user_00000000000000000000000000SYSTEM"),
-                    "FIAT",
-                    currency,
-                    BucketEnum.AVAILABLE))
+            .findAccountByOwnerAndCurrencyAndBucketName(
+                systemProperties.userId(), currency, BucketEnum.AVAILABLE.name())
             .orElseThrow(
                 () ->
                     new ApplicationException(

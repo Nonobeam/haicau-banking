@@ -3,6 +3,7 @@ package per.nonobeam.service;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import per.nonobeam.config.SystemProperties;
 import org.springframework.transaction.annotation.Transactional;
 import per.nonobeam.common.account.Account;
 import per.nonobeam.common.account.BucketEnum;
@@ -23,6 +24,7 @@ public class DepositWebhookService {
   private final DepositRepository depositRepository;
   private final LedgerEntryRepository ledgerEntryRepository;
   private final AccountRepository accountRepository;
+  private final SystemProperties systemProperties;
 
   @Transactional
   public void handle(WebhookPayload payload) {
@@ -66,7 +68,7 @@ public class DepositWebhookService {
     Account bufferAccount =
         accountRepository
             .findAccountByOwnerAndCurrencyAndBucketName(
-                "user_00000000000000000000000000SYSTEM",
+                systemProperties.userId(),
                 reservedAccount.getCurrency(),
                 BucketEnum.AVAILABLE.name())
             .orElse(null);

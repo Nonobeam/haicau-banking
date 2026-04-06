@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import per.nonobeam.config.SystemProperties;
 import org.jspecify.annotations.NonNull;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
@@ -59,6 +60,7 @@ public class DepositSweepJob extends QuartzJobBean {
     private final JobTrackingRepository jobTrackingRepository;
     private final TransactionTypeRepository transactionTypeRepository;
     private final DepositRepository depositRepository;
+    private final SystemProperties systemProperties;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void processSweep(Transaction tx) {
@@ -110,15 +112,13 @@ public class DepositSweepJob extends QuartzJobBean {
               .findByName("INBOUND_SWEEP")
               .orElseThrow(() -> new RuntimeException("Transaction pattern INBOUND_SWEEP missing"));
 
-      String systemUserId = "user_00000000000000000000000000SYSTEM";
-
       Transaction sweepTx =
           Transaction.builder()
               .id(UlidGenerator.generateTransactionId())
               .idempotencyKey("sweep_" + tx.getId())
               .transactionType(sweepType)
               .status(TransactionStatus.COMPLETED)
-              .actorId(systemUserId)
+              .actorId(systemProperties.userId())
               .causationId(tx.getId())
               .correlationId(tx.getCorrelationId())
               .sourceService("hcau-banking-reconcile")

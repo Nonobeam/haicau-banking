@@ -25,3 +25,6 @@ server:
 stub:
   enabled: ${STUB_ENABLED:false}
 
+system:
+  user-id: ${SYSTEM_USER_ID:user_00000000000000000000000000SYSTEM}
+
