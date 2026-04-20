@@ -41,7 +41,8 @@ public interface DepositRepository extends CommonDepositRepository {
   @Query(
       value =
           "SELECT * FROM transactions t"
-              + " WHERE t.transaction_type = (SELECT id FROM transaction_types WHERE name = 'INBOUND_DEPOSIT')"
+              + " WHERE t.transaction_type ="
+              + " (SELECT id FROM transaction_types WHERE name = 'INBOUND_DEPOSIT')"
               + " AND t.status = 'PENDING'"
               + " AND t.metadata::jsonb ->> 'sessionId' = :sessionId"
               + " LIMIT 1",

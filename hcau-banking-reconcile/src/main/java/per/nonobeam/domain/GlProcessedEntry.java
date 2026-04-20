@@ -1,33 +1,25 @@
-package per.nonobeam.web.common.account;
+package per.nonobeam.domain;
 
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
-import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
+/** Dedup table for the overlap-window GlSnapshotJob (Decision #42). */
 @Entity
-@Table(name = "bucket_types")
+@Table(name = "gl_processed_entries")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class BucketType {
+public class GlProcessedEntry {
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.UUID)
-  private UUID id;
-
-  private String name;
-
-  private String description;
+  @Id private String ledgerEntryId;
 
   @CreationTimestamp private OffsetDateTime createdAt;
 }

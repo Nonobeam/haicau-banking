@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.function.client.WebClient;
-import per.nonobeam.config.UlidGenerator;
+import per.nonobeam.config.UuidV7Generator;
 import per.nonobeam.exception.model.res.ApiResp;
 import per.nonobeam.service.StubDepositProvider;
 import per.nonobeam.web.common.provider.ProviderOutcome;
@@ -69,9 +69,9 @@ public class StubDepositController {
                   "sessionId",
                   sessionId,
                   "eventId",
-                  "evt_" + UlidGenerator.generate("evt"),
+                  UuidV7Generator.generate("evt"),
                   "referenceId",
-                  "pay_" + UlidGenerator.generate("pay"),
+                  UuidV7Generator.generate("pay"),
                   "outcome",
                   outcome.name(),
                   "amount",

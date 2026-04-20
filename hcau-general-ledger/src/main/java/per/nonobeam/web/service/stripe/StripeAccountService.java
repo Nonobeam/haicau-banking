@@ -1,15 +1,13 @@
 package per.nonobeam.web.service.stripe;
 
 import com.stripe.exception.StripeException;
-import com.stripe.model.Account;
+import com.stripe.model.v2.core.Account;
 import com.stripe.param.v2.core.AccountCreateParams;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import per.nonobeam.common.stripe.AbstractStripeApiService;
 import per.nonobeam.common.stripe.StripeSetting;
 
 @Service
-@RequiredArgsConstructor
 public class StripeAccountService extends AbstractStripeApiService {
 
   public StripeAccountService(StripeSetting stripeSetting) {

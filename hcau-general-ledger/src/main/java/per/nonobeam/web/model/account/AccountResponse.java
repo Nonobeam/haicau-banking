@@ -1,45 +1,56 @@
 package per.nonobeam.web.model.account;
 
 import java.time.OffsetDateTime;
-import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import per.nonobeam.common.account.AccountState;
+import per.nonobeam.common.account.CoaPath;
+import per.nonobeam.common.account.CoaPathParser;
 import per.nonobeam.web.common.account.Account;
 import per.nonobeam.web.common.account.AccountStatus;
-import per.nonobeam.web.common.account.InternalCoa;
-import per.nonobeam.web.common.account.InternalCoaFactory;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class AccountResponse {
-  private UUID id;
-  private UUID ownerId;
-  private String internalCoa;
-  private String domain;
-  private String currency;
-  private String bucketType;
+
+  private String id;
+  private String ownerId;
+  private String coaPath;
+  private String accountType;
+  private String state;
+  private String walletId;
   private AccountStatus status;
   private OffsetDateTime createdAt;
-  private String stripeAccountId;
-  private String stripeMetadata;
 
   public static AccountResponse mapToResponse(Account account) {
-    InternalCoa parsed = InternalCoaFactory.parse(account.getInternalCoa());
+    String coaPath = account.getCoaPath();
+    String accountType = null;
+    String state = null;
+
+    if (coaPath != null) {
+      try {
+        CoaPath parsed = CoaPathParser.parse(coaPath);
+        accountType = parsed.accountType().name();
+        AccountState parsedState = parsed.state();
+        state = parsedState != null ? parsedState.name() : null;
+      } catch (IllegalArgumentException ignored) {
+        // unparseable legacy path — leave accountType/state null
+      }
+    }
+
     return AccountResponse.builder()
         .id(account.getId())
-        .ownerId(account.getOwner().getId())
-        .internalCoa(account.getInternalCoa())
-        .domain(parsed.domainName())
-        .currency(parsed.currency())
-        .bucketType(parsed.bucket().name())
+        .ownerId(account.getOwner() != null ? account.getOwner().getId() : null)
+        .coaPath(coaPath)
+        .accountType(accountType)
+        .state(state)
+        .walletId(account.getWalletId())
         .status(account.getStatus())
         .createdAt(account.getCreatedAt())
-        .stripeAccountId(account.getStripeAccountId())
-        .stripeMetadata(account.getStripeMetadata())
         .build();
   }
 }

@@ -1,20 +1,23 @@
 package per.nonobeam.web.common.ledger;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import per.nonobeam.common.id.HcauId;
+import per.nonobeam.common.id.HcauIdGenerator;
 import per.nonobeam.web.common.account.Account;
 
 @Entity
@@ -26,8 +29,15 @@ import per.nonobeam.web.common.account.Account;
 public class LedgerEntry {
 
   @Id
-  @GeneratedValue(strategy = GenerationType.UUID)
-  private UUID id;
+  @HcauId(prefix = "entr")
+  private String id;
+
+  @PrePersist
+  void prePersist() {
+    if (id == null) {
+      id = HcauIdGenerator.generate("entr");
+    }
+  }
 
   private Long seq;
 
@@ -39,9 +49,13 @@ public class LedgerEntry {
   @JoinColumn(name = "account_id")
   private Account account;
 
-  private BigDecimal credit;
+  @Enumerated(EnumType.STRING)
+  @Column(name = "type")
+  private EntryType type;
 
-  private BigDecimal debit;
+  private BigDecimal amount;
+
+  private String currency;
 
   @CreationTimestamp private OffsetDateTime createdAt;
 }

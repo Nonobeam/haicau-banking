@@ -1,19 +1,19 @@
 package per.nonobeam.web.common.account;
 
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
-import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import per.nonobeam.common.id.HcauId;
+import per.nonobeam.common.id.HcauIdGenerator;
 
 @Entity
 @Table(name = "users")
@@ -24,8 +24,15 @@ import org.hibernate.annotations.CreationTimestamp;
 public class User {
 
   @Id
-  @GeneratedValue(strategy = GenerationType.UUID)
-  private UUID id;
+  @HcauId(prefix = "user")
+  private String id;
+
+  @PrePersist
+  void prePersist() {
+    if (id == null) {
+      id = HcauIdGenerator.generate("user");
+    }
+  }
 
   private String name;
 

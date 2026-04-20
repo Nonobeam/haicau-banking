@@ -11,6 +11,9 @@ import org.springframework.context.annotation.Configuration;
 import per.nonobeam.common.config.JobConfig;
 import per.nonobeam.job.DepositExpiryJob;
 import per.nonobeam.job.DepositSweepJob;
+import per.nonobeam.job.GlProcessedEntriesPurgeJob;
+import per.nonobeam.job.GlSnapshotJob;
+import per.nonobeam.job.ProvisioningReconcileJob;
 import per.nonobeam.repository.JobConfigRepository;
 
 @Configuration
@@ -66,6 +69,87 @@ public class QuartzConfig {
     return TriggerBuilder.newTrigger()
         .forJob(depositSweepJobDetail)
         .withIdentity("depositSweepTrigger")
+        .withSchedule(
+            SimpleScheduleBuilder.simpleSchedule()
+                .withIntervalInSeconds(intervalSeconds)
+                .repeatForever())
+        .build();
+  }
+
+  @Bean
+  public JobDetail glSnapshotJobDetail() {
+    return JobBuilder.newJob(GlSnapshotJob.class)
+        .withIdentity("glSnapshotJob")
+        .storeDurably()
+        .build();
+  }
+
+  @Bean
+  public Trigger glSnapshotTrigger(JobDetail glSnapshotJobDetail) {
+    int intervalSeconds =
+        Integer.parseInt(
+            jobConfigRepository
+                .findById("gl_snapshot_run_interval_sec")
+                .map(JobConfig::getValue)
+                .orElse("30"));
+
+    return TriggerBuilder.newTrigger()
+        .forJob(glSnapshotJobDetail)
+        .withIdentity("glSnapshotTrigger")
+        .withSchedule(
+            SimpleScheduleBuilder.simpleSchedule()
+                .withIntervalInSeconds(intervalSeconds)
+                .repeatForever())
+        .build();
+  }
+
+  @Bean
+  public JobDetail glProcessedEntriesPurgeJobDetail() {
+    return JobBuilder.newJob(GlProcessedEntriesPurgeJob.class)
+        .withIdentity("glProcessedEntriesPurgeJob")
+        .storeDurably()
+        .build();
+  }
+
+  @Bean
+  public Trigger glProcessedEntriesPurgeTrigger(JobDetail glProcessedEntriesPurgeJobDetail) {
+    int intervalSeconds =
+        Integer.parseInt(
+            jobConfigRepository
+                .findById("gl_purge_run_interval_sec")
+                .map(JobConfig::getValue)
+                .orElse("60"));
+
+    return TriggerBuilder.newTrigger()
+        .forJob(glProcessedEntriesPurgeJobDetail)
+        .withIdentity("glProcessedEntriesPurgeTrigger")
+        .withSchedule(
+            SimpleScheduleBuilder.simpleSchedule()
+                .withIntervalInSeconds(intervalSeconds)
+                .repeatForever())
+        .build();
+  }
+
+  @Bean
+  public JobDetail provisioningReconcileJobDetail() {
+    return JobBuilder.newJob(ProvisioningReconcileJob.class)
+        .withIdentity("provisioningReconcileJob")
+        .storeDurably()
+        .build();
+  }
+
+  @Bean
+  public Trigger provisioningReconcileTrigger(JobDetail provisioningReconcileJobDetail) {
+    int intervalSeconds =
+        Integer.parseInt(
+            jobConfigRepository
+                .findById("provisioning_reconcile_run_interval_sec")
+                .map(JobConfig::getValue)
+                .orElse("60"));
+
+    return TriggerBuilder.newTrigger()
+        .forJob(provisioningReconcileJobDetail)
+        .withIdentity("provisioningReconcileTrigger")
         .withSchedule(
             SimpleScheduleBuilder.simpleSchedule()
                 .withIntervalInSeconds(intervalSeconds)

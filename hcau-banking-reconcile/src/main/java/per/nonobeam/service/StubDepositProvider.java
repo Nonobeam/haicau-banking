@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import per.nonobeam.config.UlidGenerator;
+import per.nonobeam.config.UuidV7Generator;
 import per.nonobeam.web.common.provider.DepositProvider;
 import per.nonobeam.web.common.provider.InitiateResult;
 import per.nonobeam.web.common.provider.ProviderOutcome;
@@ -23,7 +23,7 @@ public class StubDepositProvider implements DepositProvider {
 
   @Override
   public InitiateResult initiate(long amount, String currency) {
-    String sessionId = "stub_session_" + UlidGenerator.generate("ses");
+    String sessionId = "stub_session_" + UuidV7Generator.generate("ses");
     String redirectUrl = "/api/v1/stub/deposit/pay?session=" + sessionId;
     sessions.put(sessionId, new StubSession(sessionId, amount, currency, OffsetDateTime.now()));
     return new InitiateResult(sessionId, redirectUrl);

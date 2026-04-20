@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NonNull;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
@@ -15,14 +16,21 @@ import per.nonobeam.common.config.JobConfig;
 import per.nonobeam.common.config.JobTracking;
 import per.nonobeam.common.ledger.EntryType;
 import per.nonobeam.common.ledger.LedgerEntry;
+import per.nonobeam.common.ledger.LedgerEntryWriter;
+import per.nonobeam.common.ledger.LedgerEntryWriter.LedgerEntrySpec;
 import per.nonobeam.common.ledger.Transaction;
 import per.nonobeam.common.ledger.TransactionStatus;
-import per.nonobeam.config.UlidGenerator;
 import per.nonobeam.repository.DepositRepository;
 import per.nonobeam.repository.JobConfigRepository;
 import per.nonobeam.repository.JobTrackingRepository;
 import per.nonobeam.repository.LedgerEntryRepository;
 
+/**
+ * Expires stale PENDING deposits by reversing their ledger entries (clearing → receivable).
+ *
+ * <p>Since deposits now go directly to DEPOSIT_REVERSAL on failure, this job handles the
+ * session-timeout path where no webhook was received.
+ */
 @Component
 @DisallowConcurrentExecution
 @RequiredArgsConstructor
@@ -34,7 +42,8 @@ public class DepositExpiryJob extends QuartzJobBean {
   private final DepositExpiryProcessor expiryProcessor;
 
   @Override
-  protected void executeInternal(JobExecutionContext context) throws JobExecutionException {
+  protected void executeInternal(@NonNull JobExecutionContext context)
+      throws JobExecutionException {
     log.info("Starting DepositExpiryJob");
 
     long sessionTimeout =
@@ -53,7 +62,6 @@ public class DepositExpiryJob extends QuartzJobBean {
 
     List<Transaction> expiredTxns =
         depositRepository.findExpiredDeposits(sessionTimeout, noSessionTimeout);
-
     log.info("Found {} expired deposits to process", expiredTxns.size());
 
     for (Transaction tx : expiredTxns) {
@@ -68,9 +76,11 @@ public class DepositExpiryJob extends QuartzJobBean {
   @Component
   @RequiredArgsConstructor
   public static class DepositExpiryProcessor {
+
     private final DepositRepository depositRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
     private final JobTrackingRepository jobTrackingRepository;
+    private final LedgerEntryWriter ledgerEntryWriter;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void processExpiry(Transaction tx) {
@@ -78,17 +88,22 @@ public class DepositExpiryJob extends QuartzJobBean {
       depositRepository.save(tx);
 
       List<LedgerEntry> entries = ledgerEntryRepository.findByTransactionId(tx.getId());
-      for (LedgerEntry orig : entries) {
-        LedgerEntry counter =
-            LedgerEntry.builder()
-                .id(UlidGenerator.generate("entr"))
-                .transaction(tx)
-                .account(orig.getAccount())
-                .amount(orig.getAmount())
-                .entryType(
-                    orig.getEntryType() == EntryType.CREDIT ? EntryType.DEBIT : EntryType.CREDIT)
-                .build();
-        ledgerEntryRepository.save(counter);
+
+      // Reverse each entry: CREDIT becomes DEBIT and vice versa.
+      // LedgerEntryWriter handles balance updates and locking.
+      List<LedgerEntrySpec> reversals =
+          entries.stream()
+              .map(
+                  orig ->
+                      new LedgerEntrySpec(
+                          orig.getAccount().getId(),
+                          orig.getType() == EntryType.CREDIT ? EntryType.DEBIT : EntryType.CREDIT,
+                          orig.getAmount(),
+                          orig.getCurrency() != null ? orig.getCurrency() : "USD"))
+              .toList();
+
+      if (!reversals.isEmpty()) {
+        ledgerEntryWriter.write(tx, reversals);
       }
 
       JobTracking tracking =

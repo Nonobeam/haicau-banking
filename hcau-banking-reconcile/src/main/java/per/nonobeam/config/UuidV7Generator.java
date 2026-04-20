@@ -1,14 +1,14 @@
 package per.nonobeam.config;
 
-import com.github.f4b6a3.ulid.UlidCreator;
+import com.github.f4b6a3.uuid.UuidCreator;
 
-public final class UlidGenerator {
+public final class UuidV7Generator {
 
-  private UlidGenerator() {}
+  private UuidV7Generator() {}
 
   public static String generate(String prefix) {
-    String ulid = UlidCreator.getUlid().toLowerCase();
-    return prefix + "_" + ulid;
+    String uuidV7 = UuidCreator.getTimeOrderedEpoch().toString().replace("-", "");
+    return prefix + "_" + uuidV7;
   }
 
   public static String generateTransactionId() {

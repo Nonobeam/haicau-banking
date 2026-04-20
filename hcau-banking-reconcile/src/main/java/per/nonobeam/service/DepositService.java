@@ -1,59 +1,70 @@
 package per.nonobeam.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
-import per.nonobeam.config.SystemProperties;
 import org.springframework.transaction.annotation.Transactional;
 import per.nonobeam.common.account.Account;
 import per.nonobeam.common.account.AccountStatus;
-import per.nonobeam.common.account.BucketEnum;
+import per.nonobeam.common.account.CoaPathParser;
 import per.nonobeam.common.account.User;
 import per.nonobeam.common.config.ExternalProvider;
 import per.nonobeam.common.ledger.EntryType;
-import per.nonobeam.common.ledger.LedgerEntry;
+import per.nonobeam.common.ledger.LedgerEntryWriter;
+import per.nonobeam.common.ledger.LedgerEntryWriter.LedgerEntrySpec;
 import per.nonobeam.common.ledger.Transaction;
 import per.nonobeam.common.ledger.TransactionStatus;
 import per.nonobeam.common.ledger.TransactionType;
 import per.nonobeam.config.CorrelationIdFilter;
-import per.nonobeam.config.UlidGenerator;
+import per.nonobeam.config.UuidV7Generator;
 import per.nonobeam.exception.ApplicationErrorCode;
 import per.nonobeam.exception.ApplicationException;
 import per.nonobeam.repository.AccountRepository;
 import per.nonobeam.repository.CommonUserRepository;
 import per.nonobeam.repository.DepositRepository;
 import per.nonobeam.repository.ExternalProviderRepository;
-import per.nonobeam.repository.LedgerEntryRepository;
 import per.nonobeam.repository.TransactionTypeRepository;
 import per.nonobeam.web.common.provider.DepositProvider;
 import per.nonobeam.web.model.deposit.DepositRequest;
 import per.nonobeam.web.model.deposit.DepositResponse;
 
+/**
+ * Handles deposit initiation (Stage 1).
+ *
+ * <p>Stage 1 entries (DEPOSIT_RECEIVABLE):
+ *
+ * <ul>
+ *   <li>GL DEBIT: receivable:counterparty:stripe
+ *   <li>GL CREDIT: wallet:control:clearing
+ *   <li>SUB CREDIT: wallet:{customer_id}:{wallet_id}:clearing
+ * </ul>
+ */
 @Service
 @RequiredArgsConstructor
 public class DepositService {
 
   private static final List<String> SUPPORTED_CURRENCIES = List.of("USD");
+  private static final String PROVIDER_NAME = "stripe";
 
   private final CommonUserRepository userRepository;
   private final AccountRepository accountRepository;
   private final DepositRepository depositRepository;
-  private final LedgerEntryRepository ledgerEntryRepository;
   private final TransactionTypeRepository transactionTypeRepository;
   private final ExternalProviderRepository externalProviderRepository;
+  private final LedgerEntryWriter ledgerEntryWriter;
   private final DepositProvider depositProvider;
   private final ObjectMapper objectMapper;
-  private final SystemProperties systemProperties;
 
   public DepositResponse initiate(DepositRequest request) {
     validateRequest(request);
 
     String currency = request.getCurrency().toUpperCase();
-    long amount = request.getAmount();
+    BigDecimal amount = BigDecimal.valueOf(request.getAmount());
 
-    var initiateResult = depositProvider.initiate(amount, currency);
+    var initiateResult = depositProvider.initiate(request.getAmount(), currency);
 
     return persistInitiation(
         request.getUserId(),
@@ -85,53 +96,60 @@ public class DepositService {
       throw new ApplicationException(ApplicationErrorCode.USER_NOT_FOUND, request.getUserId());
     }
 
-    Account reserved =
+    Account clearing =
         accountRepository
-            .findAccountByOwnerAndCurrencyAndBucketName(
-                user.getId(), currency, BucketEnum.RESERVED.name())
+            .findClearingAccountByOwner(user.getId())
             .orElseThrow(
                 () ->
                     new ApplicationException(ApplicationErrorCode.ACCOUNT_NOT_FOUND, user.getId()));
 
-    if (reserved.getStatus() != AccountStatus.ACTIVE) {
-      throw new ApplicationException(ApplicationErrorCode.ACCOUNT_NOT_ACTIVE, reserved.getId());
+    if (clearing.getStatus() != AccountStatus.ACTIVE) {
+      throw new ApplicationException(ApplicationErrorCode.ACCOUNT_NOT_ACTIVE, clearing.getId());
     }
-
-    // TODO: enforce max deposit limit by user tier.
   }
 
   @Transactional
   protected DepositResponse persistInitiation(
-      String userId, String currency, long amount, String sessionId, String redirectUrl) {
+      String userId, String currency, BigDecimal amount, String sessionId, String redirectUrl) {
+
     User user =
         userRepository
             .findById(userId)
             .orElseThrow(
                 () -> new ApplicationException(ApplicationErrorCode.USER_NOT_FOUND, userId));
 
-    Account reserved =
+    // Resolve GL accounts
+    final Account receivable =
         accountRepository
-            .findAccountByOwnerAndCurrencyAndBucketName(
-                userId, currency, BucketEnum.RESERVED.name())
+            .findByCoaPath(CoaPathParser.receivablePath(PROVIDER_NAME))
+            .orElseThrow(
+                () ->
+                    new ApplicationException(
+                        ApplicationErrorCode.ACCOUNT_NOT_FOUND, "receivable:counterparty:stripe"));
+
+    final Account walletControlClearing =
+        accountRepository
+            .findByCoaPath(
+                CoaPathParser.walletControlPath(per.nonobeam.common.account.AccountState.CLEARING))
+            .orElseThrow(
+                () ->
+                    new ApplicationException(
+                        ApplicationErrorCode.ACCOUNT_NOT_FOUND, "wallet:control:clearing"));
+
+    // Resolve customer clearing account
+    final Account customerClearing =
+        accountRepository
+            .findClearingAccountByOwner(userId)
             .orElseThrow(
                 () -> new ApplicationException(ApplicationErrorCode.ACCOUNT_NOT_FOUND, userId));
 
-    Account buffer =
-        accountRepository
-            .findAccountByOwnerAndCurrencyAndBucketName(
-                systemProperties.userId(), currency, BucketEnum.AVAILABLE.name())
-            .orElseThrow(
-                () ->
-                    new ApplicationException(
-                        ApplicationErrorCode.ACCOUNT_NOT_FOUND, "SYSTEM_BUFFER"));
-
-    TransactionType inboundDepositType =
+    TransactionType depositReceivableType =
         transactionTypeRepository
-            .findByName("INBOUND_DEPOSIT")
+            .findByName("DEPOSIT_RECEIVABLE")
             .orElseThrow(
                 () ->
                     new ApplicationException(
-                        ApplicationErrorCode.INVALID_REQUEST, "INBOUND_DEPOSIT"));
+                        ApplicationErrorCode.INVALID_REQUEST, "DEPOSIT_RECEIVABLE"));
 
     ExternalProvider provider =
         externalProviderRepository
@@ -146,9 +164,9 @@ public class DepositService {
                             .config("{}")
                             .build()));
 
-    String correlationId = MDC.get(CorrelationIdFilter.CORRELATION_ID_KEY);
-    if (correlationId == null || correlationId.isBlank()) {
-      correlationId = UlidGenerator.generateCorrelationId();
+    String traceId = MDC.get(CorrelationIdFilter.CORRELATION_ID_KEY);
+    if (traceId == null || traceId.isBlank()) {
+      traceId = UuidV7Generator.generateCorrelationId();
     }
 
     String metadata;
@@ -160,12 +178,11 @@ public class DepositService {
 
     Transaction transaction =
         Transaction.builder()
-            .id(UlidGenerator.generateTransactionId())
-            .idempotencyKey(correlationId + "_" + sessionId)
-            .transactionType(inboundDepositType)
+            .idempotencyKey(traceId + "_" + sessionId)
+            .transactionType(depositReceivableType)
             .status(TransactionStatus.PENDING)
             .actorId(user.getId())
-            .correlationId(correlationId)
+            .traceId(traceId)
             .sourceService("hcau-banking-reconcile")
             .providerId(provider.getId())
             .metadata(metadata)
@@ -173,26 +190,14 @@ public class DepositService {
 
     depositRepository.save(transaction);
 
-    LedgerEntry userCredit =
-        LedgerEntry.builder()
-            .id(UlidGenerator.generateEntryId())
-            .transaction(transaction)
-            .account(reserved)
-            .amount(amount)
-            .entryType(EntryType.CREDIT)
-            .build();
-
-    LedgerEntry bufferDebit =
-        LedgerEntry.builder()
-            .id(UlidGenerator.generateEntryId())
-            .transaction(transaction)
-            .account(buffer)
-            .amount(amount)
-            .entryType(EntryType.DEBIT)
-            .build();
-
-    ledgerEntryRepository.save(userCredit);
-    ledgerEntryRepository.save(bufferDebit);
+    // Stage 1 entries: GL DEBIT receivable, GL CREDIT wallet:control:clearing,
+    // SUB CREDIT customer clearing (cross-ledger class a)
+    ledgerEntryWriter.write(
+        transaction,
+        List.of(
+            new LedgerEntrySpec(receivable.getId(), EntryType.DEBIT, amount, currency),
+            new LedgerEntrySpec(walletControlClearing.getId(), EntryType.CREDIT, amount, currency),
+            new LedgerEntrySpec(customerClearing.getId(), EntryType.CREDIT, amount, currency)));
 
     return new DepositResponse(
         transaction.getId(), sessionId, redirectUrl, transaction.getStatus().name());

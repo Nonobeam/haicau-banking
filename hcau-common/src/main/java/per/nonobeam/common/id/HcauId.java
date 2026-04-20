@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import org.hibernate.annotations.IdGeneratorType;
 
-@IdGeneratorType(UlidIdentifierGenerator.class)
+@IdGeneratorType(HcauIdGenerator.class)
 @Target(ElementType.FIELD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface UlidGeneratedId {
+public @interface HcauId {
 
-  String prefix() default "id";
+  String prefix() default "";
 }

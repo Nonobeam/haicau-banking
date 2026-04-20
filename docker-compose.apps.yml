@@ -1,10 +1,9 @@
 services:
   general-ledger:
-    image: maven:3.9-eclipse-temurin-21
+    build:
+      context: .
+      dockerfile: hcau-general-ledger/Dockerfile
     profiles: ["apps"]
-    working_dir: /workspace
-    command: >
-      bash -lc "mvn -f hcau-general-ledger/pom.xml -DskipTests spring-boot:run"
     ports:
       - "8081:8080"
     environment:
@@ -12,9 +11,6 @@ services:
       DB_PORT: 5432
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PORT: 8080
-    volumes:
-      - ./:/workspace
-      - maven-repo-central:/root/.m2
     depends_on:
       - postgres
       - kafka
@@ -22,11 +18,10 @@ services:
       - ledger-net
 
   banking-reconcile:
-    image: maven:3.9-eclipse-temurin-21
+    build:
+      context: .
+      dockerfile: hcau-banking-reconcile/Dockerfile
     profiles: ["apps"]
-    working_dir: /workspace
-    command: >
-      bash -lc "mvn -f hcau-banking-module-common/pom.xml -DskipTests install && mvn -f hcau-banking-common/pom.xml -DskipTests install && mvn -f hcau-banking-reconcile-common/pom.xml -DskipTests install && mvn -f hcau-banking-reconcile/pom.xml -DskipTests spring-boot:run"
     ports:
       - "8082:8080"
     environment:
@@ -34,15 +29,30 @@ services:
       DB_PORT: 5432
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PORT: 8080
-    volumes:
-      - ./:/workspace
-      - maven-repo-reconcile:/root/.m2
     depends_on:
       - postgres
       - kafka
     networks:
       - ledger-net
 
-volumes:
-  maven-repo-central:
-  maven-repo-reconcile:
+  platform-service:
+    build:
+      context: .
+      dockerfile: hcau-platform-service/Dockerfile
+    profiles: ["apps"]
+    ports:
+      - "8083:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      PORT: 8080
+    depends_on:
+      - postgres
+      - kafka
+    networks:
+      - ledger-net
+
+networks:
+  ledger-net:
+    driver: bridge

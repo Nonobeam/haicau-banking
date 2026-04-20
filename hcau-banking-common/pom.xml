@@ -3,10 +3,10 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-parent</artifactId>
-    <version>4.0.0</version>
-    <relativePath/>
+    <groupId>per.nonobeam</groupId>
+    <artifactId>hcau-parent</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
   </parent>
   <groupId>per.nonobeam</groupId>
   <artifactId>hcau-banking-common</artifactId>
@@ -32,7 +32,7 @@
     </dependency>
     <dependency>
       <groupId>per.nonobeam</groupId>
-      <artifactId>hcau-banking-module-common</artifactId>
+      <artifactId>hcau-common</artifactId>
       <version>0.0.1-SNAPSHOT</version>
     </dependency>
     <dependency>
@@ -49,11 +49,6 @@
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
       <optional>true</optional>
-    </dependency>
-    <dependency>
-      <groupId>com.github.f4b6a3</groupId>
-      <artifactId>ulid-creator</artifactId>
-      <version>5.2.3</version>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>

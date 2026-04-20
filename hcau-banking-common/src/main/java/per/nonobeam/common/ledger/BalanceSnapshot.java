@@ -1,8 +1,9 @@
 package per.nonobeam.common.ledger;
 
+import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -18,11 +19,9 @@ import org.hibernate.annotations.UpdateTimestamp;
 @AllArgsConstructor
 public class BalanceSnapshot {
 
-  @Id private String accountId;
+  @EmbeddedId private BalanceSnapshotId id;
 
-  private Long balance;
-
-  private Long lastProcessedEntrySeq;
+  @Builder.Default private BigDecimal balance = BigDecimal.ZERO;
 
   @UpdateTimestamp private OffsetDateTime updatedAt;
 }
