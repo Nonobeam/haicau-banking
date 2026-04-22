@@ -1,4 +1,4 @@
-package per.nonobeam.web.common.account;
+package per.nonobeam.common.account;
 
 public enum AccountStatus {
   ACTIVE,

@@ -17,6 +17,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import per.nonobeam.common.account.AccountStatus;
 import per.nonobeam.common.id.HcauId;
 import per.nonobeam.common.id.HcauIdGenerator;
 

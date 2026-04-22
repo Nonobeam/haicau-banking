@@ -21,6 +21,7 @@
     <module>hcau-banking-module-common</module>
     <module>hcau-banking-reconcile-common</module>
     <module>hcau-platform-common</module>
+    <module>hcau-internal-client</module>
     <module>hcau-banking-reconcile</module>
     <module>hcau-general-ledger</module>
     <module>hcau-platform-service</module>
@@ -59,6 +60,11 @@
       <dependency>
         <groupId>per.nonobeam</groupId>
         <artifactId>hcau-platform-common</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>per.nonobeam</groupId>
+        <artifactId>hcau-internal-client</artifactId>
         <version>0.0.1-SNAPSHOT</version>
       </dependency>
       <dependency>

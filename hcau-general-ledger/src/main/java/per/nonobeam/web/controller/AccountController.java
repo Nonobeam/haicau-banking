@@ -6,26 +6,30 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import per.nonobeam.web.model.account.AccountResponse;
-import per.nonobeam.web.model.account.CreateAccountRequest;
+import per.nonobeam.common.account.AccountResponse;
+import per.nonobeam.common.account.EnableCurrencyRequest;
+import per.nonobeam.common.account.LedgerAccountRequest;
 import per.nonobeam.web.service.AccountService;
 
 @RestController
-@RequestMapping("/api/v1/accounts")
 @RequiredArgsConstructor
 public class AccountController {
 
   private final AccountService accountService;
 
-  @PostMapping
-  public AccountResponse createAccount(@Valid @RequestBody CreateAccountRequest request) {
-    return accountService.createAccount(request);
-  }
-
-  @GetMapping("/{ownerId}")
+  @GetMapping("/api/v1/accounts/{ownerId}")
   public AccountResponse getAccount(@PathVariable String ownerId) {
     return accountService.getAccount(ownerId);
+  }
+
+  @PostMapping("/internal/v1/accounts")
+  public AccountResponse provisionAccount(@Valid @RequestBody LedgerAccountRequest request) {
+    return accountService.provisionAccount(request);
+  }
+
+  @PostMapping("/internal/v1/accounts/currencies")
+  public void enableCurrency(@Valid @RequestBody EnableCurrencyRequest request) {
+    accountService.enableCurrency(request);
   }
 }

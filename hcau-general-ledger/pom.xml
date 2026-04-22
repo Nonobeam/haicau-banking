@@ -89,7 +89,12 @@
     </dependency>
     <dependency>
       <groupId>per.nonobeam</groupId>
-      <artifactId>hcau-platform-common</artifactId>
+      <artifactId>hcau-banking-module-common</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>per.nonobeam</groupId>
+      <artifactId>hcau-internal-client</artifactId>
       <version>0.0.1-SNAPSHOT</version>
     </dependency>
   </dependencies>
@@ -103,6 +108,10 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
           <useModulePath>false</useModulePath>
+          <environmentVariables>
+            <!-- Docker Desktop's rootless mode blocks Ryuk's socket mount. -->
+            <TESTCONTAINERS_RYUK_DISABLED>true</TESTCONTAINERS_RYUK_DISABLED>
+          </environmentVariables>
         </configuration>
       </plugin>
       <plugin>

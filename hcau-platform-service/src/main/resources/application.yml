@@ -1,6 +1,6 @@
 spring:
   application:
-    name: hcau-general-ledger
+    name: hcau-platform-service
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:postgres}
     username: ${DB_USER:postgres}
@@ -13,14 +13,24 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        default_schema: ${DB_SCHEMA:general-ledger}
+        default_schema: ${DB_SCHEMA:platform-service}
     open-in-view: ${VIEW_JPA:false}
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
 
 server:
-  port: ${PORT:8080}
+  port: ${PORT:8083}
 
-stripe:
-  secret-key: ${STRIPE_SECRET_KEY:}
+hcau:
+  service:
+    id: ${HCAU_SERVICE_ID:100}
+
+credentials:
+  # Default is a placeholder that lets the service start locally; real key must be set in production
+  encryption-key: ${CREDENTIALS_ENCRYPTION_KEY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+
+internal:
+  channels:
+    general-ledger:
+      url: ${GENERAL_LEDGER_URL:http://localhost:8080}

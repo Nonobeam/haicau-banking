@@ -88,6 +88,79 @@ docker compose -f docker-compose.infra.yml -f docker-compose.apps.yml down
 - General ledger: http://localhost:8081
 - Banking reconcile: http://localhost:8082
 
+## Scripts
+
+Utility scripts live in the `scripts/` directory.
+
+### `scripts/EncryptCredential.java` — Encrypt a provider credential
+
+Encrypts Stripe credentials using AES-256-GCM — the same scheme as `CredentialEncryptionService`
+in `hcau-platform-service`. Enter the raw Stripe key; the script builds the JSON and encrypts
+the whole blob, so no key names are visible in the database.
+
+**Prerequisites**
+
+- Java 21 on PATH (already required to build the project).
+- `CREDENTIALS_ENCRYPTION_KEY` — Base64-encoded 32-byte AES key. Generate once per environment:
+  ```bash
+  openssl rand -base64 32
+  ```
+  Store this value in `hcau-platform-service/.env`.
+
+**Run**
+
+```bash
+CREDENTIALS_ENCRYPTION_KEY="<base64-key>" java --source 21 scripts/EncryptCredential.java
+```
+
+When prompted, enter the raw Stripe key (hidden input):
+
+```
+Enter Stripe secret key (sk_live_... or sk_test_...): [hidden]
+
+SQL to update the providers table:
+  UPDATE "platform-service".providers
+  SET credentials = '<encrypted-blob>'
+  WHERE code = 'stripe';
+```
+
+Copy that SQL and run it against the `central-banking` database.
+
+**When to run**
+
+Run this once after `hcau-platform-service` migrations have been applied (the `providers`
+table must exist at schema version ≥ 2). `CREDENTIALS_ENCRYPTION_KEY` must remain set in
+the service environment on every startup — it is used to decrypt the stored credential at
+runtime.
+
+## Database migrations
+
+Each service module manages its own schema with Flyway. Migration files live in two locations:
+
+| Location | Used by |
+|---|---|
+| `<module>/db/migration/` | Maven Flyway plugin (manual runs) |
+| `<module>/src/main/resources/db/migration/` | Spring Boot Flyway (auto-run on startup) |
+
+**Run migrations manually** (replace values as needed):
+
+```bash
+# hcau-platform-service
+cd hcau-platform-service
+export $(tr -d '\r' < .env | grep -v '^#' | xargs)
+mvn flyway:migrate \
+  -Dflyway.url="jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?currentSchema=${DB_SCHEMA}" \
+  -Dflyway.user="${DB_USER}" \
+  -Dflyway.password="${DB_PASSWORD}" \
+  -Dflyway.schemas="${DB_SCHEMA}"
+```
+
+Run the same command from `hcau-general-ledger/` for the general-ledger schema.
+
+> Both modules target the `central-banking` database (set `DB_NAME=central-banking` in `.env`).
+> `hcau-platform-service` uses schema `platform-service`; `hcau-general-ledger` uses schema
+> configured by `DB_SCHEMA` (default `general-ledger`).
+
 ## Notes
 
 - Environment files are expected per module (`.env`, `.env.example`).

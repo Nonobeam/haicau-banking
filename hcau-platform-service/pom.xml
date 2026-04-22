@@ -74,6 +74,16 @@
       <artifactId>hcau-platform-common</artifactId>
       <version>0.0.1-SNAPSHOT</version>
     </dependency>
+    <dependency>
+      <groupId>per.nonobeam</groupId>
+      <artifactId>hcau-banking-module-common</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>per.nonobeam</groupId>
+      <artifactId>hcau-internal-client</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+    </dependency>
   </dependencies>
   <dependencyManagement>
   </dependencyManagement>

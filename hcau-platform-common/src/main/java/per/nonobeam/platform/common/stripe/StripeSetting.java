@@ -1,4 +1,4 @@
-package per.nonobeam.common.stripe;
+package per.nonobeam.platform.common.stripe;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;

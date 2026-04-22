@@ -1,23 +1,28 @@
-package per.nonobeam.common.stripe;
+package per.nonobeam.platform.common.stripe;
 
 import com.stripe.StripeClient;
 import com.stripe.exception.StripeException;
 import com.stripe.net.RequestOptions;
-import jakarta.annotation.PostConstruct;
+import java.util.function.Supplier;
 
 public abstract class AbstractStripeApiService {
 
-  private final StripeSetting stripeSetting;
+  private final Supplier<String> secretKeySupplier;
+  private volatile StripeClient stripeClient;
 
-  protected StripeClient stripeClient;
-
-  protected AbstractStripeApiService(StripeSetting stripeSetting) {
-    this.stripeSetting = stripeSetting;
+  protected AbstractStripeApiService(Supplier<String> secretKeySupplier) {
+    this.secretKeySupplier = secretKeySupplier;
   }
 
-  @PostConstruct
-  void init() {
-    this.stripeClient = new StripeClient(stripeSetting.getSecretKey());
+  protected StripeClient client() {
+    if (stripeClient == null) {
+      synchronized (this) {
+        if (stripeClient == null) {
+          stripeClient = new StripeClient(secretKeySupplier.get());
+        }
+      }
+    }
+    return stripeClient;
   }
 
   protected RequestOptions idempotentOptions(String idempotencyKey) {

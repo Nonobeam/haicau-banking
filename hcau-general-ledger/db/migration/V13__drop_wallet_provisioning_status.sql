@@ -1,0 +1,2 @@
+ALTER TABLE wallet_provisioning_status DROP CONSTRAINT IF EXISTS wallet_provisioning_status_user_id_fkey;
+DROP TABLE wallet_provisioning_status;

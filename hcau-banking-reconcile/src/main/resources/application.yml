@@ -22,6 +22,10 @@ spring:
 server:
   port: ${PORT:8080}
 
+hcau:
+  service:
+    id: ${HCAU_SERVICE_ID:102}
+
 stub:
   enabled: ${STUB_ENABLED:false}
 

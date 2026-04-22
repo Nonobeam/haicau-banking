@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import per.nonobeam.exception.ApplicationErrorCode;
+import per.nonobeam.exception.ApplicationException;
 import tools.jackson.databind.exc.InvalidFormatException;
 
 @Slf4j
@@ -34,9 +35,21 @@ public class ControllerAdviceHandler extends ExceptionHandlerAdvice {
     return error(ApplicationErrorCode.INVALID_REQUEST_PARAMETER);
   }
 
+  @ExceptionHandler(ApplicationException.class)
+  public ResponseEntity<?> handle(final HttpServletRequest request, ApplicationException e) {
+    log.warn(
+        "ApplicationException at [{} {}] - Code: {}, Message: {}",
+        request.getMethod(),
+        request.getRequestURI(),
+        e.getErrorCode().getSystemCode(),
+        e.getMessage());
+    return error(e.getErrorCode(), e.getArgs());
+  }
+
   @ExceptionHandler(Throwable.class)
   public ResponseEntity<?> handle(HttpServletRequest request, Throwable e) {
-    return error(ApplicationErrorCode.INVALID_REQUEST_PARAMETER, e.getMessage());
+    log.error("Unhandled exception at [{} {}]", request.getMethod(), request.getRequestURI(), e);
+    return error(ApplicationErrorCode.INTERNAL_SERVER_ERROR, e.getMessage());
   }
 
   @ExceptionHandler(MethodArgumentTypeMismatchException.class)
