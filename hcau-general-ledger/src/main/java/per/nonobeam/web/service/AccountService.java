@@ -18,6 +18,7 @@ import per.nonobeam.common.account.EnableCurrencyRequest;
 import per.nonobeam.common.account.LedgerAccountRequest;
 import per.nonobeam.common.provider.AbstractProviderAccountPort;
 import per.nonobeam.common.provider.ProvisionedAccount;
+import per.nonobeam.config.AccountDeduplicator;
 import per.nonobeam.exception.ApplicationErrorCode;
 import per.nonobeam.exception.ApplicationException;
 import per.nonobeam.web.common.account.Account;
@@ -46,34 +47,40 @@ public class AccountService {
   private final UserProviderAccountRepository userProviderAccountRepository;
   private final AbstractProviderAccountPort providerAccountPort;
   private final CurrencyValidator currencyValidator;
+  private final AccountDeduplicator deduplicator;
 
   @Transactional
   public AccountResponse provisionAccount(LedgerAccountRequest request) {
-    Set<String> currencies = dedupe(request.currencies());
+    User owner = resolveUser(request.ownerId());
+    Set<String> currencies = deduplicator.uniqueCurrencies(owner.getId(), request.currencies());
     currencyValidator.requireAllActive(currencies);
 
-    User owner = resolveUser(request.ownerId());
-
-    // Idempotency: wallet existence means provisioning already ran.
-    var existingWallet = walletRepository.findByCustomerId(owner.getId());
-    if (existingWallet.isPresent()) {
-      List<Account> ownerAccounts =
-          accountRepository.findByOwnerIdAndStatus(owner.getId(), AccountStatus.ACTIVE);
-      seedSnapshots(ownerAccounts, currencies);
-      Account main =
-          accountRepository
-              .findByCoaPathAndLedger(
-                  CoaPathParser.walletPath(
-                      owner.getId(), existingWallet.get().getId(), AccountState.MAIN),
-                  LedgerType.SUB)
-              .orElseThrow(
-                  () ->
-                      new ApplicationException(
-                          ApplicationErrorCode.ACCOUNT_NOT_FOUND, owner.getId()));
-      return mapToResponse(main);
+    if (!deduplicator.tryAcquire(owner.getId())) {
+      log.info("Duplicate provision request for ownerId={}, checking existing wallet", owner.getId());
+      var existingWallet = walletRepository.findByCustomerId(owner.getId());
+      if (existingWallet.isPresent()) {
+        List<Account> ownerAccounts =
+            accountRepository.findByOwnerIdAndStatus(owner.getId(), AccountStatus.ACTIVE);
+        seedSnapshots(ownerAccounts, currencies);
+        Account main =
+            accountRepository
+                .findByCoaPathAndLedger(
+                    CoaPathParser.walletPath(
+                        owner.getId(), existingWallet.get().getId(), AccountState.MAIN),
+                    LedgerType.SUB)
+                .orElseThrow(
+                    () ->
+                        new ApplicationException(
+                            ApplicationErrorCode.ACCOUNT_NOT_FOUND, owner.getId()));
+        return mapToResponse(main);
+      }
     }
 
-    return provision(owner, currencies);
+    try {
+      return provision(owner, currencies);
+    } finally {
+      deduplicator.release(owner.getId());
+    }
   }
 
   @Transactional
@@ -107,16 +114,6 @@ public class AccountService {
   }
 
   // ── Private ───────────────────────────────────────────────────────────────
-
-  private Set<String> dedupe(List<String> currencies) {
-    Set<String> seen = new LinkedHashSet<>();
-    for (String code : currencies) {
-      if (!seen.add(code)) {
-        throw new ApplicationException(ApplicationErrorCode.DUPLICATE_CURRENCY, code);
-      }
-    }
-    return seen;
-  }
 
   private User resolveUser(String ownerId) {
     User user =

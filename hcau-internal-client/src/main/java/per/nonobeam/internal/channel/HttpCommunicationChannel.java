@@ -20,10 +20,6 @@ public class HttpCommunicationChannel extends CommunicationChannel {
 
   private static final Logger log = LoggerFactory.getLogger(HttpCommunicationChannel.class);
 
-  static final String HEADER_CORRELATION_ID = "X-Correlation-Id";
-  static final String HEADER_TRACE_ID = "X-Trace-Id";
-  static final String HEADER_SOURCE_SERVICE = "X-Source-Service";
-
   private final RestClient restClient;
   private final InternalChannelProperties properties;
 

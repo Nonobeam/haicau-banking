@@ -1,6 +1,10 @@
 spring:
   application:
     name: hcau-general-ledger
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:postgres}
     username: ${DB_USER:postgres}
@@ -31,4 +35,8 @@ stub:
 
 system:
   user-id: ${SYSTEM_USER_ID:user_00000000000000000000000000SYSTEM}
+
+hcau:
+  webhook:
+    dedup-ttl: ${WEBHOOK_DEDUP_TTL:PT24H}
 

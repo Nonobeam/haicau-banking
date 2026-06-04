@@ -34,3 +34,6 @@ internal:
   channels:
     general-ledger:
       url: ${GENERAL_LEDGER_URL:http://localhost:8080}
+      endpoints:
+        create-account: ${GL_ENDPOINT_CREATE_ACCOUNT:/api/v1/accounts}
+        create-currency-account: ${GL_ENDPOINT_CREATE_CURRENCY_ACCOUNT:/api/v1/accounts/currency}

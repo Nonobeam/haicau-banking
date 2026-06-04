@@ -2,6 +2,10 @@ package per.nonobeam.common.channel;
 
 public abstract class CommunicationChannel {
 
+  public static final String HEADER_CORRELATION_ID = "X-Correlation-Id";
+  public static final String HEADER_TRACE_ID = "X-Trace-Id";
+  public static final String HEADER_SOURCE_SERVICE = "X-Source-Service";
+
   public abstract <ReqT, ResT> ChannelResponse<ResT> push(
       String destination, ChannelRequest<ReqT> request, Class<ResT> responseType);
 
