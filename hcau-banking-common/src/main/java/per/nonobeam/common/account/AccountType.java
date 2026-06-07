@@ -7,5 +7,7 @@ public enum AccountType {
   PAYABLE,
   OFFSET,
   REVENUE,
-  EXTERNAL
+  EXTERNAL,
+  EXPENSE,
+  PTS
 }

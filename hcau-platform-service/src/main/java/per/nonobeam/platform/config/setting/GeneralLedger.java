@@ -9,12 +9,12 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "internal.channels.general-ledger")
 public class GeneralLedger {
 
-    private String url;
-    private Endpoints endpoints = new Endpoints();
+  private String url;
+  private Endpoints endpoints = new Endpoints();
 
-    @Data
-    public static class Endpoints {
-        private String createAccount;
-        private String createCurrencyAccount;
-    }
+  @Data
+  public static class Endpoints {
+    private String createAccount;
+    private String createCurrencyAccount;
+  }
 }

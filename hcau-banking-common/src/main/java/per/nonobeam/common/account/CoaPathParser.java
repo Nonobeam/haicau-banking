@@ -63,6 +63,19 @@ public final class CoaPathParser {
     return "external:counterparty:" + provider.toLowerCase();
   }
 
+  public static String loyaltyExpensePath() {
+    return "expense:system:loyalty";
+  }
+
+  public static String ptsControlPath() {
+    return "pts:control:reserve";
+  }
+
+  public static String ptsUserPath(String userId) {
+    requireNonBlank("userId", userId);
+    return "pts:user:" + userId;
+  }
+
   // ─── parser ──────────────────────────────────────────────────────────────────
 
   public static CoaPath parse(String path) {
@@ -105,6 +118,14 @@ public final class CoaPathParser {
       case "external" -> {
         validateMinSegments(path, parts, 3);
         yield new CoaPath(AccountType.EXTERNAL, LedgerType.GL, path, tail(parts, 1));
+      }
+      case "expense" -> {
+        validateMinSegments(path, parts, 3);
+        yield new CoaPath(AccountType.EXPENSE, LedgerType.GL, path, tail(parts, 1));
+      }
+      case "pts" -> {
+        validateMinSegments(path, parts, 3);
+        yield new CoaPath(AccountType.PTS, LedgerType.GL, path, tail(parts, 1));
       }
       default ->
           throw new IllegalArgumentException("Unknown CoA path type: " + head + " in " + path);

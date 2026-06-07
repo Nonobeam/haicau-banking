@@ -5,12 +5,21 @@ services:
       dockerfile: hcau-general-ledger/Dockerfile
     profiles: ["apps"]
     ports:
-      - "8081:8080"
+      - "18081:8080"
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
+      DB_NAME: central-banking
+      DB_USER: postgres
+      DB_PASSWORD: "123456"
+      DB_SCHEMA: general-ledger
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       PORT: 8080
+      BANKING_RECONCILE_URL: http://banking-reconcile:8080
+      PLATFORM_SERVICE_URL: http://platform-service:8080
+      JAVA_OPTS: "-XX:+UseZGC -XX:+ZProactive -Xms512m -Xmx2g -XX:SoftMaxHeapSize=1800m"
     depends_on:
       - postgres
       - kafka
@@ -23,12 +32,13 @@ services:
       dockerfile: hcau-banking-reconcile/Dockerfile
     profiles: ["apps"]
     ports:
-      - "8082:8080"
+      - "18082:8080"
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PORT: 8080
+      JAVA_OPTS: "-XX:+UseZGC -XX:+ZProactive -Xms512m -Xmx2g -XX:SoftMaxHeapSize=1800m"
     depends_on:
       - postgres
       - kafka
@@ -47,11 +57,77 @@ services:
       DB_PORT: 5432
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PORT: 8080
+      JAVA_OPTS: "-XX:+UseZGC -XX:+ZProactive -Xms512m -Xmx2g -XX:SoftMaxHeapSize=1800m"
     depends_on:
       - postgres
       - kafka
     networks:
       - ledger-net
+
+  notification-service:
+    build:
+      context: ../spring-boot-notification-service
+      dockerfile: Dockerfile
+    profiles: ["apps"]
+    ports:
+      - "8084:8080"
+    environment:
+      ENV_DB_HOST: postgres
+      ENV_DB_PORT: 5432
+      ENV_DB_NAME: central-banking
+      ENV_DB_SCHEMA: notification
+      ENV_DB_USERNAME: postgres
+      ENV_DB_PASSWORD: 123456
+      ENV_KAFKA_BROKERS: kafka:29092
+      ENV_KAFKA_GROUP_ID: notification-group
+      ENV_KAFKA_TOPIC_EMAIL: email-topic
+      ENV_KAFKA_TOPIC_NOTIFICATION: notification-topic
+      ENV_KAFKA_TOPIC_DLQ: notification-dlq
+      ENV_AWS_SES_SMTP_HOST: ${ENV_AWS_SES_SMTP_HOST}
+      ENV_AWS_SES_SMTP_PORT: ${ENV_AWS_SES_SMTP_PORT}
+      ENV_AWS_SES_SMTP_USERNAME: ${ENV_AWS_SES_SMTP_USERNAME}
+      ENV_AWS_SES_SMTP_PASSWORD: ${ENV_AWS_SES_SMTP_PASSWORD}
+      ENV_AWS_SES_SMTP_FROM: ${ENV_AWS_SES_SMTP_FROM}
+      ENV_AWS_SES_SMTP_SENDER_NAME: ${ENV_AWS_SES_SMTP_SENDER_NAME}
+      ENV_AWS_ACCESS_KEY: ${ENV_AWS_ACCESS_KEY}
+      ENV_AWS_SECRET_KEY: ${ENV_AWS_SECRET_KEY}
+      ENV_AWS_REGION: ${ENV_AWS_REGION:-us-west-1}
+      ENV_ENABLE_JSON_LOG: ${ENV_ENABLE_JSON_LOG:-false}
+      JAVA_OPTS: "-XX:+UseZGC -XX:+ZProactive -Xms512m -Xmx1g -XX:SoftMaxHeapSize=900m"
+    depends_on:
+      - postgres
+      - kafka
+    networks:
+      - ledger-net
+
+  loyalty-service:
+    build:
+      context: .
+      dockerfile: hcau-loyalty-service/Dockerfile
+    profiles: ["apps"]
+    ports:
+      - "8085:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: central-banking
+      DB_USER: postgres
+      DB_PASSWORD: "123456"
+      DB_SCHEMA: loyalty-service
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      GENERAL_LEDGER_URL: http://general-ledger:8080
+      HCAU_SERVICE_ID: 103
+      PORT: 8080
+      JAVA_OPTS: "-XX:+UseZGC -XX:+ZProactive -Xms512m -Xmx2g -XX:SoftMaxHeapSize=1800m"
+    networks:
+      - ledger-net
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+      - general-ledger
 
 networks:
   ledger-net:

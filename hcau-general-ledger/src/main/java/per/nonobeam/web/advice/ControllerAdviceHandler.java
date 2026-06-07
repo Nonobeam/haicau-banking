@@ -13,6 +13,11 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import per.nonobeam.exception.ApplicationErrorCode;
 import per.nonobeam.exception.ApplicationException;
+import per.nonobeam.validation.DuplicateRequestException;
+import per.nonobeam.validation.InvalidCoaPathException;
+import per.nonobeam.validation.SameAccountException;
+import per.nonobeam.validation.UserLimitExceededException;
+import per.nonobeam.validation.WalletInactiveException;
 import tools.jackson.databind.exc.InvalidFormatException;
 
 @Slf4j
@@ -44,6 +49,53 @@ public class ControllerAdviceHandler extends ExceptionHandlerAdvice {
         e.getErrorCode().getSystemCode(),
         e.getMessage());
     return error(e.getErrorCode(), e.getArgs());
+  }
+
+  @ExceptionHandler(UserLimitExceededException.class)
+  public ResponseEntity<?> handle(HttpServletRequest request, UserLimitExceededException e) {
+    log.warn(
+        "Rate limit at [{} {}]: {}", request.getMethod(), request.getRequestURI(), e.getMessage());
+    return error(ApplicationErrorCode.SAGA_RATE_LIMIT_EXCEEDED);
+  }
+
+  @ExceptionHandler(DuplicateRequestException.class)
+  public ResponseEntity<?> handle(HttpServletRequest request, DuplicateRequestException e) {
+    log.warn(
+        "Duplicate request at [{} {}]: {}",
+        request.getMethod(),
+        request.getRequestURI(),
+        e.getMessage());
+    return error(ApplicationErrorCode.DUPLICATE_REQUEST);
+  }
+
+  @ExceptionHandler(InvalidCoaPathException.class)
+  public ResponseEntity<?> handle(HttpServletRequest request, InvalidCoaPathException e) {
+    log.warn(
+        "Invalid CoA path at [{} {}]: {}",
+        request.getMethod(),
+        request.getRequestURI(),
+        e.getMessage());
+    return error(ApplicationErrorCode.INVALID_COA_PATH, e.getPath());
+  }
+
+  @ExceptionHandler(WalletInactiveException.class)
+  public ResponseEntity<?> handle(HttpServletRequest request, WalletInactiveException e) {
+    log.warn(
+        "Wallet inactive at [{} {}]: {}",
+        request.getMethod(),
+        request.getRequestURI(),
+        e.getMessage());
+    return error(ApplicationErrorCode.WALLET_INACTIVE, e.getWalletId());
+  }
+
+  @ExceptionHandler(SameAccountException.class)
+  public ResponseEntity<?> handle(HttpServletRequest request, SameAccountException e) {
+    log.warn(
+        "Same account at [{} {}]: {}",
+        request.getMethod(),
+        request.getRequestURI(),
+        e.getMessage());
+    return error(ApplicationErrorCode.SAME_ACCOUNT);
   }
 
   @ExceptionHandler(Throwable.class)

@@ -1,0 +1,26 @@
+# OS threads + G1GC
+# Usage: docker compose -f docker-compose.infra.yml -f docker-compose.apps.yml -f docker-compose.os.yml --profile apps up -d
+services:
+  general-ledger:
+    environment:
+      JAVA_OPTS: >-
+        -XX:+UseG1GC
+        -Xms512m
+        -Xmx2g
+        -Dspring.threads.virtual.enabled=false
+
+  banking-reconcile:
+    environment:
+      JAVA_OPTS: >-
+        -XX:+UseG1GC
+        -Xms512m
+        -Xmx2g
+        -Dspring.threads.virtual.enabled=false
+
+  platform-service:
+    environment:
+      JAVA_OPTS: >-
+        -XX:+UseG1GC
+        -Xms512m
+        -Xmx2g
+        -Dspring.threads.virtual.enabled=false

@@ -24,12 +24,18 @@ public class AccountController {
   @PostMapping
   public AccountResponse createAccount(@Valid @RequestBody LedgerAccountRequest request) {
     return channel
-        .push(generalLedger.getEndpoints().getCreateAccount(), ChannelRequest.of(request), AccountResponse.class)
+        .push(
+            generalLedger.getEndpoints().getCreateAccount(),
+            ChannelRequest.of(request),
+            AccountResponse.class)
         .body();
   }
 
   @PostMapping("/currencies")
   public void enableCurrency(@Valid @RequestBody EnableCurrencyRequest request) {
-    channel.push(generalLedger.getEndpoints().getCreateCurrencyAccount(), ChannelRequest.of(request), Void.class);
+    channel.push(
+        generalLedger.getEndpoints().getCreateCurrencyAccount(),
+        ChannelRequest.of(request),
+        Void.class);
   }
 }

@@ -20,6 +20,10 @@
 # Build file
 **/target/
 
+# Extracted JAR artifacts (from jar -x commands)
+BOOT-INF/
+per/
+
 # Design/dev docs in hcau-general-ledger
 docs/
 plans/

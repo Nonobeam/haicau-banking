@@ -18,8 +18,7 @@ public class AccountDeduplicator {
   private final Duration ttl;
 
   public AccountDeduplicator(
-      StringRedisTemplate redis,
-      @Value("${hcau.account.dedup-ttl:PT10M}") Duration ttl) {
+      StringRedisTemplate redis, @Value("${hcau.account.dedup-ttl:PT10M}") Duration ttl) {
     this.redis = redis;
     this.ttl = ttl;
   }
@@ -35,8 +34,8 @@ public class AccountDeduplicator {
   }
 
   /**
-   * Returns only the currency codes not yet seen for this owner, using a Redis Set as the
-   * dedup store. Codes already present in the set are silently dropped.
+   * Returns only the currency codes not yet seen for this owner, using a Redis Set as the dedup
+   * store. Codes already present in the set are silently dropped.
    */
   public Set<String> uniqueCurrencies(String ownerId, Collection<String> currencies) {
     String key = CURRENCIES_PREFIX + ownerId;

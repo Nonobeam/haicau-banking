@@ -1,0 +1,32 @@
+# Virtual threads + ZGC
+# Usage: docker compose -f docker-compose.infra.yml -f docker-compose.apps.yml -f docker-compose.vt.yml --profile apps up -d
+services:
+  general-ledger:
+    environment:
+      JAVA_OPTS: >-
+        -XX:+UseZGC
+        -XX:+ZProactive
+        -Xms512m
+        -Xmx2g
+        -XX:SoftMaxHeapSize=1800m
+        -Dspring.threads.virtual.enabled=true
+
+  banking-reconcile:
+    environment:
+      JAVA_OPTS: >-
+        -XX:+UseZGC
+        -XX:+ZProactive
+        -Xms512m
+        -Xmx2g
+        -XX:SoftMaxHeapSize=1800m
+        -Dspring.threads.virtual.enabled=true
+
+  platform-service:
+    environment:
+      JAVA_OPTS: >-
+        -XX:+UseZGC
+        -XX:+ZProactive
+        -Xms512m
+        -Xmx2g
+        -XX:SoftMaxHeapSize=1800m
+        -Dspring.threads.virtual.enabled=true

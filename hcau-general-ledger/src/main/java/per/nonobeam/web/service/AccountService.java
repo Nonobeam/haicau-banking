@@ -2,7 +2,6 @@ package per.nonobeam.web.service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -56,7 +55,8 @@ public class AccountService {
     currencyValidator.requireAllActive(currencies);
 
     if (!deduplicator.tryAcquire(owner.getId())) {
-      log.info("Duplicate provision request for ownerId={}, checking existing wallet", owner.getId());
+      log.info(
+          "Duplicate provision request for ownerId={}, checking existing wallet", owner.getId());
       var existingWallet = walletRepository.findByCustomerId(owner.getId());
       if (existingWallet.isPresent()) {
         List<Account> ownerAccounts =
@@ -221,6 +221,7 @@ public class AccountService {
         AccountState parsedState = parsed.state();
         state = parsedState != null ? parsedState.name() : null;
       } catch (IllegalArgumentException ignored) {
+        // coaPath is in legacy format — leave accountType/state as null
       }
     }
     return new AccountResponse(

@@ -77,7 +77,8 @@ public class SagaOrchestrator {
       var request = new SagaStepRequest(saga.getSagaId(), step.type(), saga.getPayload());
       String destination = step.participantId() + "/internal/v1/saga/step";
       ChannelResponse<SagaStepResponse> response =
-          channel.pull(destination, ChannelRequest.of(request, saga.getSagaId()), SagaStepResponse.class);
+          channel.pull(
+              destination, ChannelRequest.of(request, saga.getSagaId()), SagaStepResponse.class);
       SagaStepResponse resp = response.body();
       if (resp == null) {
         failureTracker.recordFailure(step.participantId());
@@ -104,7 +105,9 @@ public class SagaOrchestrator {
   private void handleFailure(SagaInstance saga, String failureType) {
     Decision decision =
         ruleEngine.decide(
-            saga.getSagaType(), failureType, saga.getRetryCount() != null ? saga.getRetryCount() : 0);
+            saga.getSagaType(),
+            failureType,
+            saga.getRetryCount() != null ? saga.getRetryCount() : 0);
     switch (decision.type()) {
       case "RETRY" -> scheduleRetry(saga, decision.delayMs());
       case "PARK" -> park(saga, failureType);
@@ -117,7 +120,9 @@ public class SagaOrchestrator {
     int updated =
         sagaRepository.compareAndSetState(
             saga.getSagaId(), saga.getCurrentState(), nextState, saga.getVersion());
-    if (updated == 0) throw new SagaVersionConflictException(saga.getSagaId());
+    if (updated == 0) {
+      throw new SagaVersionConflictException(saga.getSagaId());
+    }
     saga.setCurrentState(nextState);
   }
 

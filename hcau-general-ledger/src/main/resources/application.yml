@@ -1,6 +1,9 @@
 spring:
   application:
     name: hcau-general-ledger
+  threads:
+    virtual:
+      enabled: true
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -20,6 +23,11 @@ spring:
         default_schema: ${DB_SCHEMA:general-ledger}
     open-in-view: ${VIEW_JPA:false}
 
+  flyway:
+    schemas: ${DB_SCHEMA:general-ledger}
+    default-schema: ${DB_SCHEMA:general-ledger}
+    create-schemas: true
+
   messages:
     basename: messages
     use-code-as-default-message: true
@@ -35,8 +43,52 @@ hcau:
     id: ${HCAU_SERVICE_ID:101}
   account:
     dedup-ttl: ${ACCOUNT_DEDUP_TTL:PT10M}
+  instance:
+    id: ${INSTANCE_ID:${spring.application.name}-${random.uuid}}
+  gate:
+    instance-limit: 500
+    recovery-threshold: 350
+    probe-pct: 10
+    user-limit: 10
+    user-circuit-cooldown-seconds: 30
+  batch:
+    drain-interval-ms: 2
+    max-size: 500
+  startup:
+    prewarm-enabled: true
+    prewarm-timeout-seconds: 120
+  health:
+    failure-threshold: 10
+    failure-window-seconds: 60
+  dead-letter:
+    max-auto-retry: 3
+    retry-job-interval-minutes: 5
+    alert-threshold: 10
+    alert-job-interval-minutes: 10
+  recovery:
+    auto-reopen-after-db-recovery: false
+  kafka:
+    topics:
+      saga-completed: "saga.completed"
+      dead-letter-review: "dead-letter.review"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
 
 internal:
   channels:
     platform-service:
       url: ${PLATFORM_SERVICE_URL:http://localhost:8083}
+      connect-timeout-ms: 1000
+      read-timeout-ms: 5000
+    banking-reconcile:
+      url: ${BANKING_RECONCILE_URL:http://localhost:18082}
+      connect-timeout-ms: 1000
+      read-timeout-ms: 5000

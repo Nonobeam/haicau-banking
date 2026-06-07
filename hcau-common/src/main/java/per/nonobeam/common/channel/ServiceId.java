@@ -11,7 +11,8 @@ import java.util.Arrays;
 public enum ServiceId {
   PLATFORM_SERVICE("100"),
   GENERAL_LEDGER("101"),
-  RECONCILE("102");
+  RECONCILE("102"),
+  LOYALTY_SERVICE("103");
 
   /** Regex pattern every service ID must satisfy: exactly 3 decimal digits. */
   public static final String FORMAT = "\\d{3}";

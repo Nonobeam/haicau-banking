@@ -1,6 +1,9 @@
 spring:
   application:
     name: hcau-platform-service
+  threads:
+    virtual:
+      enabled: true
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:postgres}
     username: ${DB_USER:postgres}
@@ -25,6 +28,24 @@ server:
 hcau:
   service:
     id: ${HCAU_SERVICE_ID:100}
+  instance:
+    id: ${INSTANCE_ID:${spring.application.name}-${random.uuid}}
+  gate:
+    instance-limit: 150
+    recovery-threshold: 100
+    probe-pct: 10
+  startup:
+    prewarm-enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
 
 credentials:
   # Default is a placeholder that lets the service start locally; real key must be set in production
