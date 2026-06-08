@@ -12,6 +12,7 @@ import per.nonobeam.health.ParticipantHealthMap;
 import per.nonobeam.internal.channel.HttpCommunicationChannel;
 import per.nonobeam.internal.saga.SagaStepRequest;
 import per.nonobeam.internal.saga.SagaStepResponse;
+import per.nonobeam.saga.event.SagaNotificationPublisher;
 
 @Component
 public class SagaOrchestrator {
@@ -26,6 +27,7 @@ public class SagaOrchestrator {
   private final CircuitComposer circuitComposer;
   private final HttpCommunicationChannel channel;
   private final OrchestratorFailureTracker failureTracker;
+  private final SagaNotificationPublisher notificationPublisher;
 
   public SagaOrchestrator(
       SagaRepository sagaRepository,
@@ -35,7 +37,8 @@ public class SagaOrchestrator {
       DeadLetterWriter deadLetterWriter,
       CircuitComposer circuitComposer,
       HttpCommunicationChannel channel,
-      OrchestratorFailureTracker failureTracker) {
+      OrchestratorFailureTracker failureTracker,
+      SagaNotificationPublisher notificationPublisher) {
     this.sagaRepository = sagaRepository;
     this.ruleEngine = ruleEngine;
     this.stepResolver = stepResolver;
@@ -44,6 +47,7 @@ public class SagaOrchestrator {
     this.circuitComposer = circuitComposer;
     this.channel = channel;
     this.failureTracker = failureTracker;
+    this.notificationPublisher = notificationPublisher;
   }
 
   public void advance(SagaInstance saga) {
@@ -116,6 +120,9 @@ public class SagaOrchestrator {
     }
   }
 
+  private static final java.util.Set<String> TERMINAL_SUCCESS_STATES =
+      java.util.Set.of("COMMITTED", "COMPENSATED");
+
   private void transition(SagaInstance saga, String nextState) {
     int updated =
         sagaRepository.compareAndSetState(
@@ -124,6 +131,9 @@ public class SagaOrchestrator {
       throw new SagaVersionConflictException(saga.getSagaId());
     }
     saga.setCurrentState(nextState);
+    if (TERMINAL_SUCCESS_STATES.contains(nextState)) {
+      notificationPublisher.publish(saga, nextState);
+    }
   }
 
   private void scheduleRetry(SagaInstance saga, int delayMs) {
@@ -148,5 +158,6 @@ public class SagaOrchestrator {
     saga.setCurrentState("DEAD_LETTERED");
     sagaRepository.save(saga);
     deadLetterWriter.write(saga, failureReason);
+    notificationPublisher.publish(saga, "DEAD_LETTERED");
   }
 }

@@ -71,6 +71,8 @@ hcau:
     topics:
       saga-completed: "saga.completed"
       dead-letter-review: "dead-letter.review"
+      notification-email: ${HCAU_KAFKA_NOTI_EMAIL_TOPIC:notification.email}
+      notification-telegram: ${HCAU_KAFKA_NOTI_TELEGRAM_TOPIC:notification.telegram}
 
 management:
   endpoints:
