@@ -24,7 +24,10 @@ public class UserContactController {
   public ResponseEntity<UserContactResponse> getContact(@PathVariable String userId) {
     return userContactRepository
         .findByUserId(userId)
-        .map(c -> ResponseEntity.ok(new UserContactResponse(c.getUserId(), c.getEmail(), c.getTelegramChatId())))
+        .map(
+            c ->
+                ResponseEntity.ok(
+                    new UserContactResponse(c.getUserId(), c.getEmail(), c.getTelegramChatId())))
         .orElse(ResponseEntity.notFound().build());
   }
 
@@ -34,11 +37,16 @@ public class UserContactController {
     UserContact contact =
         userContactRepository
             .findByUserId(userId)
-            .orElse(UserContact.builder().userId(userId).createdAt(java.time.OffsetDateTime.now()).build());
+            .orElse(
+                UserContact.builder()
+                    .userId(userId)
+                    .createdAt(java.time.OffsetDateTime.now())
+                    .build());
     contact.setEmail(request.email());
     contact.setTelegramChatId(request.telegramChatId());
     contact.setUpdatedAt(java.time.OffsetDateTime.now());
     userContactRepository.save(contact);
-    return ResponseEntity.ok(new UserContactResponse(userId, contact.getEmail(), contact.getTelegramChatId()));
+    return ResponseEntity.ok(
+        new UserContactResponse(userId, contact.getEmail(), contact.getTelegramChatId()));
   }
 }

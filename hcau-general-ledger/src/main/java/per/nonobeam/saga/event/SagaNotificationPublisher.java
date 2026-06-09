@@ -50,7 +50,8 @@ public class SagaNotificationPublisher {
         publishToTelegram(saga, terminalState, contact.telegramChatId(), callbackUrl);
       }
     } catch (Exception e) {
-      log.warn("Failed to publish notification for sagaId={}: {}", saga.getSagaId(), e.getMessage());
+      log.warn(
+          "Failed to publish notification for sagaId={}: {}", saga.getSagaId(), e.getMessage());
     }
   }
 
@@ -59,7 +60,9 @@ public class SagaNotificationPublisher {
     ObjectNode msg = objectMapper.createObjectNode();
     msg.put("toAddress", email);
     msg.put("subject", buildSubject(state, saga.getSagaType()));
-    msg.put("content", buildEmailContent(state, saga.getSagaType(), saga.getSagaId(), saga.getFailureReason()));
+    msg.put(
+        "content",
+        buildEmailContent(state, saga.getSagaType(), saga.getSagaId(), saga.getFailureReason()));
     if (callbackUrl != null) msg.put("callbackUrl", callbackUrl);
     kafkaTemplate.send(emailTopic, saga.getSagaId(), objectMapper.writeValueAsString(msg));
   }
@@ -68,18 +71,21 @@ public class SagaNotificationPublisher {
       throws Exception {
     ObjectNode msg = objectMapper.createObjectNode();
     msg.put("toAddress", chatId);
-    msg.put("content", buildTelegramContent(state, saga.getSagaType(), saga.getSagaId(), saga.getFailureReason()));
+    msg.put(
+        "content",
+        buildTelegramContent(state, saga.getSagaType(), saga.getSagaId(), saga.getFailureReason()));
     if (callbackUrl != null) msg.put("callbackUrl", callbackUrl);
     kafkaTemplate.send(telegramTopic, saga.getSagaId(), objectMapper.writeValueAsString(msg));
   }
 
   private UserContact resolveContact(String userId) {
     try {
-      UserContact contact = restClient
-          .get()
-          .uri(platformServiceUrl + "/internal/v1/users/{userId}/contact", userId)
-          .retrieve()
-          .body(UserContact.class);
+      UserContact contact =
+          restClient
+              .get()
+              .uri(platformServiceUrl + "/internal/v1/users/{userId}/contact", userId)
+              .retrieve()
+              .body(UserContact.class);
       return contact != null ? contact : new UserContact(userId, null, null);
     } catch (Exception e) {
       log.warn("Could not resolve contact for userId={}: {}", userId, e.getMessage());
@@ -107,7 +113,8 @@ public class SagaNotificationPublisher {
 
   private String buildEmailContent(String state, String sagaType, String sagaId, String reason) {
     if ("COMMITTED".equals(state))
-      return String.format("Your %s transaction (ID: %s) has been completed successfully.", sagaType, sagaId);
+      return String.format(
+          "Your %s transaction (ID: %s) has been completed successfully.", sagaType, sagaId);
     if ("COMPENSATED".equals(state))
       return String.format("Your %s transaction (ID: %s) has been reversed.", sagaType, sagaId);
     if ("DEAD_LETTERED".equals(state))
